@@ -79,14 +79,14 @@ class ImageDisplayWidget(QWidget):
         self.update()
         
     def set_zoom(self, scale_factor):
-        """设置缩放比例"""
+        """Set zoom scale factor"""
         self.scale_factor = scale_factor
         self.update()
         
 
         
     def widget_to_image_coords(self, pos):
-        """将窗口坐标转换为图像坐标"""
+        """Convert widget coordinates to image coordinates"""
         if not self.image:
             return 0, 0
             
@@ -116,27 +116,27 @@ class ImageDisplayWidget(QWidget):
         return image_x, image_y
         
     def mouseMoveEvent(self, event):
-        """鼠标移动事件 - 处理拖拽和平移"""
-        # 处理边界框拖拽
+        """Mouse move event - handle dragging and panning"""
+        # Handle bounding box dragging
         if self.dragging and self.drag_bbox_index >= 0 and self.drag_bbox_index < len(self.annotations):
             current_pos = event.pos()
             if self.drag_start_pos:
-                # 计算移动距离
+                # Calculate movement distance
                 dx = current_pos.x() - self.drag_start_pos.x()
                 dy = current_pos.y() - self.drag_start_pos.y()
                 
-                # 转换为图像坐标的移动距离
+                # Convert to image coordinate movement distance
                 image_dx = dx / self.scale_factor
                 image_dy = dy / self.scale_factor
                 
 
                 
-                # 更新边界框坐标
+                # Update bounding box coordinates
                 bbox = self.annotations[self.drag_bbox_index]
                 old_box = bbox["box"]
                 
                 if self.drag_mode == "move":
-                    # 移动模式
+                    # Move mode
                     new_box = [
                         int(float(old_box[0]) + image_dx),
                         int(float(old_box[1]) + image_dy),
@@ -144,7 +144,7 @@ class ImageDisplayWidget(QWidget):
                         int(float(old_box[3]) + image_dy)
                     ]
                 else:
-                    # 调整大小模式
+                    # Resize mode
                     new_box = list(old_box)
                     try:
                         if self.resize_handle == "bottom_right":
@@ -160,18 +160,18 @@ class ImageDisplayWidget(QWidget):
                             new_box[0] = int(float(old_box[0]) + image_dx)
                             new_box[3] = int(float(old_box[3]) + image_dy)
                     except (ValueError, TypeError) as e:
-                        # 如果坐标转换失败，保持原值
+                        # If coordinate conversion fails, keep original values
                         print(f"Coordinate conversion error: {e}")
                         new_box = list(old_box)
                 
-                # 确保边界框有效且不超出图像范围
+                # Ensure bounding box is valid and within image bounds
                 widget_size = self.size()
                 image_size = self.image.size()
                 
                 print(f"New bounding box: {new_box}")
                 print(f"Image size: {image_size.width()} x {image_size.height()}")
                 
-                # 检查边界框是否有效
+                # Check if bounding box is valid
                 is_valid_size = len(new_box) == 4
                 is_valid_coords = new_box[0] < new_box[2] and new_box[1] < new_box[3]
                 is_in_bounds = (new_box[0] >= 0 and new_box[1] >= 0 and 
@@ -184,7 +184,7 @@ class ImageDisplayWidget(QWidget):
                         bbox["box"] = new_box
                         self.update()
                         
-                        # 发送信号通知主窗口更新输入框
+                        # Send signal to notify main window to update input fields
                         self.bbox_clicked.emit(self.drag_bbox_index)
                         print(f"✅ Bounding box updated successfully")
                     except Exception as e:
@@ -198,24 +198,24 @@ class ImageDisplayWidget(QWidget):
                 
                 print(f"=== Drag debug end ===\n")
                 
-                # 更新起始位置
+                # Update start position
                 self.drag_start_pos = current_pos
         
-        # 处理图像平移
+        # Handle image panning
         elif self.panning and self.pan_start_pos:
             current_pos = event.pos()
             dx = current_pos.x() - self.pan_start_pos.x()
             dy = current_pos.y() - self.pan_start_pos.y()
             
-            # 计算新的偏移量
+            # Calculate new offset
             new_offset_x = self.zoom_offset_x + dx
             new_offset_y = self.zoom_offset_y + dy
             
-            # 限制平移范围，防止图像被拖出视图
+            # Limit panning range to prevent image from being dragged out of view
             widget_size = self.size()
             image_size = self.image.size()
             
-            # 计算图像在当前缩放下的尺寸
+            # Calculate image size at current zoom level
             scale_x = widget_size.width() / image_size.width()
             scale_y = widget_size.height() / image_size.height()
             auto_scale = min(scale_x, scale_y, 1.0)
@@ -224,11 +224,11 @@ class ImageDisplayWidget(QWidget):
             scaled_width = int(image_size.width() * current_scale)
             scaled_height = int(image_size.height() * current_scale)
             
-            # 计算最大允许的偏移量
+            # Calculate maximum allowed offset
             max_offset_x = max(0, (scaled_width - widget_size.width()) // 2)
             max_offset_y = max(0, (scaled_height - widget_size.height()) // 2)
             
-            # 应用边界限制
+            # Apply boundary constraints
             if scaled_width > widget_size.width():
                 self.zoom_offset_x = max(-max_offset_x, min(max_offset_x, new_offset_x))
             else:
@@ -239,14 +239,14 @@ class ImageDisplayWidget(QWidget):
             else:
                 self.zoom_offset_y = 0
             
-            # 更新起始位置
+            # Update start position
             self.pan_start_pos = current_pos
             
-            # 重绘
+            # Redraw
             self.update()
                 
     def mouseReleaseEvent(self, event):
-        """鼠标释放事件 - 结束拖拽和平移"""
+        """Mouse release event - end dragging and panning"""
         if event.button() == Qt.LeftButton:
             self.dragging = False
             self.drag_start_pos = None
@@ -254,14 +254,14 @@ class ImageDisplayWidget(QWidget):
             self.drag_mode = "move"
             self.resize_handle = None
             
-            # 结束平移
+            # End panning
             if self.panning:
                 self.panning = False
                 self.pan_start_pos = None
-                self.setCursor(Qt.ArrowCursor)  # 恢复默认光标
+                self.setCursor(Qt.ArrowCursor)  # Restore default cursor
             
     def mouseDoubleClickEvent(self, event):
-        """鼠标双击事件 - 重置缩放"""
+        """Mouse double-click event - reset zoom"""
         if event.button() == Qt.LeftButton:
             self.scale_factor = 1.0
             self.zoom_offset_x = 0
@@ -270,27 +270,27 @@ class ImageDisplayWidget(QWidget):
             self.zoom_changed.emit(1.0)
             
     def wheelEvent(self, event):
-        """鼠标滚轮事件 - 缩放功能"""
+        """Mouse wheel event - zoom functionality"""
         if self.image:
-            # 获取滚轮角度
+            # Get wheel angle
             delta = event.angleDelta().y()
             
-            # 使用上一次点击的位置作为缩放中心，如果没有则使用当前鼠标位置
+            # Use last click position as zoom center, if not available use current mouse position
             zoom_center_pos = self.last_click_pos if self.last_click_pos else event.pos()
             
-            # 计算缩放因子
+            # Calculate zoom factor
             if delta > 0:
-                # 向上滚动，放大
+                # Scroll up, zoom in
                 new_scale = min(5.0, self.scale_factor * 1.1)
             else:
-                # 向下滚动，缩小
+                # Scroll down, zoom out
                 new_scale = max(0.1, self.scale_factor * 0.9)
             
-            # 计算缩放中心在图像上的位置（缩放前）
+            # Calculate zoom center position on image (before zoom)
             widget_size = self.size()
             image_size = self.image.size()
             
-            # 计算当前缩放下的偏移
+            # Calculate offset at current zoom level
             scale_x = widget_size.width() / image_size.width()
             scale_y = widget_size.height() / image_size.height()
             auto_scale = min(scale_x, scale_y, 1.0)
@@ -301,68 +301,68 @@ class ImageDisplayWidget(QWidget):
             x_offset = (widget_size.width() - scaled_width) // 2 + self.zoom_offset_x
             y_offset = (widget_size.height() - scaled_height) // 2 + self.zoom_offset_y
             
-            # 缩放中心在图像上的位置
+            # Zoom center position on image
             center_x = (zoom_center_pos.x() - x_offset) / current_scale
             center_y = (zoom_center_pos.y() - y_offset) / current_scale
             
-            # 更新缩放
+            # Update zoom
             old_scale = self.scale_factor
             self.scale_factor = new_scale
             
-            # 计算新的偏移量，使鼠标位置保持不变
+            # Calculate new offset to keep mouse position unchanged
             new_scaled_width = int(image_size.width() * new_scale)
             new_scaled_height = int(image_size.height() * new_scale)
             new_x_offset = (widget_size.width() - new_scaled_width) // 2
             new_y_offset = (widget_size.height() - new_scaled_height) // 2
             
-            # 计算需要的偏移量，使缩放中心下的图像点保持不变
+            # Calculate required offset to keep image point under zoom center unchanged
             self.zoom_offset_x = center_x * new_scale - zoom_center_pos.x() + new_x_offset
             self.zoom_offset_y = center_y * new_scale - zoom_center_pos.y() + new_y_offset
             
-            # 更新显示
+            # Update display
             self.update()
             
-            # 发送缩放信号
+            # Send zoom signal
             self.zoom_changed.emit(new_scale)
         
     def paintEvent(self, event):
-        """绘制事件"""
+        """Paint event"""
         if self.image is None:
             return
             
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        # 计算缩放和居中
+        # Calculate scaling and centering
         widget_size = self.size()
         image_size = self.image.size()
         
-        # 计算缩放比例（支持自定义缩放）
+        # Calculate scale factor (supports custom scaling)
         scale_x = widget_size.width() / image_size.width()
         scale_y = widget_size.height() / image_size.height()
         auto_scale = min(scale_x, scale_y, 1.0)
         
-        # 使用自定义缩放或自动缩放
+        # Use custom scale or auto scale
         if self.scale_factor == 1.0:
             current_scale = auto_scale
         else:
             current_scale = self.scale_factor
         
-        # 计算居中位置（考虑缩放偏移）
+        # Calculate center position (considering zoom offset)
         scaled_width = int(image_size.width() * current_scale)
         scaled_height = int(image_size.height() * current_scale)
         x_offset = (widget_size.width() - scaled_width) // 2 + self.zoom_offset_x
         y_offset = (widget_size.height() - scaled_height) // 2 + self.zoom_offset_y
         
-        # 绘制图像
+        # Draw image
         painter.drawPixmap(int(x_offset), int(y_offset), scaled_width, scaled_height, self.image)
         
-        # 绘制边界框
+        # Draw bounding boxes
         for i, ann in enumerate(self.annotations):
             box = ann["box"]
             label = ann["class"]
             
-            # 缩放坐标（确保坐标是数字类型）
+            # Scale coordinates (ensure coordinates are numeric types)
             x1 = int(float(box[0]) * current_scale) + x_offset
             y1 = int(float(box[1]) * current_scale) + y_offset
             x2 = int(float(box[2]) * current_scale) + x_offset
@@ -370,26 +370,26 @@ class ImageDisplayWidget(QWidget):
             
 
             
-            # 绘制矩形 - 只有选中的边界框有填充
+            # Draw rectangle - only selected bounding boxes have fill
             if i == self.selected_bbox:
-                # 选中的边界框：蓝色边框，半透明蓝色填充
+                # Selected bounding box: blue border, semi-transparent blue fill
                 painter.setPen(QPen(QColor(0, 0, 255), 3))
-                painter.setBrush(QColor(0, 0, 255, 50))  # 半透明蓝色填充
+                painter.setBrush(QColor(0, 0, 255, 50))  # Semi-transparent blue fill
             else:
-                # 普通边界框：红色边框，无填充
+                # Regular bounding box: red border, no fill
                 painter.setPen(QPen(QColor(255, 0, 0), 2))
-                painter.setBrush(Qt.NoBrush)  # 无填充
+                painter.setBrush(Qt.NoBrush)  # No fill
             
             painter.drawRect(int(x1), int(y1), int(x2 - x1), int(y2 - y1))
             
-            # 如果是选中的边界框，绘制调整手柄
+            # If it's the selected bounding box, draw resize handles
             if i == self.selected_bbox:
-                handle_size = 16  # 增大手柄大小，与检测区域保持一致
-                # 绘制四个角的调整手柄
+                handle_size = 16  # Increase handle size to match detection area
+                # Draw resize handles at four corners
                 painter.setPen(QPen(QColor(255, 255, 0), 2))
                 painter.setBrush(QColor(255, 255, 0))
                 
-                # 计算手柄位置
+                # Calculate handle positions
                 handle_positions = {
                     "top_left": (int(x1 - handle_size//2), int(y1 - handle_size//2)),
                     "top_right": (int(x2 - handle_size//2), int(y1 - handle_size//2)),
@@ -397,55 +397,55 @@ class ImageDisplayWidget(QWidget):
                     "bottom_right": (int(x2 - handle_size//2), int(y2 - handle_size//2))
                 }
                 
-                # 绘制手柄
+                # Draw handles
                 for handle_name, (hx, hy) in handle_positions.items():
                     painter.drawRect(hx, hy, handle_size, handle_size)
             
-            # 绘制标签
+            # Draw label
             font = QFont("Arial", 10)
             painter.setFont(font)
             painter.setPen(QPen(QColor(255, 255, 0), 1))
             
-            # 标签背景
+            # Label background
             text_rect = painter.fontMetrics().boundingRect(f"{label} {i}")
             painter.fillRect(int(x1), int(y1 - text_rect.height() - 5), 
                            text_rect.width() + 10, text_rect.height() + 5, 
                            QColor(0, 0, 0, 180))
             
-            # 绘制文本
+            # Draw text
             painter.drawText(int(x1 + 5), int(y1 - 5), f"{label} {i}")
     
     def mousePressEvent(self, event):
-        """鼠标点击事件"""
+        """Mouse click event"""
         if event.button() == Qt.LeftButton and self.image:
-            # 获取点击位置
+            # Get click position
             pos = event.pos()
             image_x, image_y = self.widget_to_image_coords(pos)
             
-            # 检查是否点击了边界框或调整手柄
+            # Check if clicked on bounding box or resize handle
             bbox_clicked = False
             for i, ann in enumerate(self.annotations):
                 box = ann["box"]
-                # 确保坐标是数字类型进行比较
+                # Ensure coordinates are numeric types for comparison
                 if (float(box[0]) <= image_x <= float(box[2]) and 
                     float(box[1]) <= image_y <= float(box[3])):
                     
-                    # 检查是否点击了调整手柄
-                    handle_size = 16  # 进一步增大手柄检测区域，提高检测成功率
+                    # Check if clicked on resize handle
+                    handle_size = 16  # Further increase handle detection area to improve detection success rate
                     
-                    # 统计点击次数
+                    # Count clicks
                     self.handle_click_stats["total"] += 1
                     
-                    # 计算手柄在窗口坐标中的位置（与绘制代码保持一致）
+                    # Calculate handle position in window coordinates (consistent with drawing code)
                     widget_size = self.size()
                     image_size = self.image.size()
                     
-                    # 使用与绘制相同的缩放计算方式
+                    # Use same scaling calculation as drawing code
                     scale_x = widget_size.width() / image_size.width()
                     scale_y = widget_size.height() / image_size.height()
                     auto_scale = min(scale_x, scale_y, 1.0)
                     
-                    # 使用自定义缩放或自动缩放（与绘制代码一致）
+                    # Use custom scale or auto scale (consistent with drawing code)
                     if self.scale_factor == 1.0:
                         current_scale = auto_scale
                     else:
@@ -456,19 +456,19 @@ class ImageDisplayWidget(QWidget):
                     x_offset = (widget_size.width() - scaled_width) // 2 + self.zoom_offset_x
                     y_offset = (widget_size.height() - scaled_height) // 2 + self.zoom_offset_y
                     
-                    # 计算边界框在窗口坐标中的位置
+                    # Calculate bounding box position in window coordinates
                     bbox_x1 = int(float(box[0]) * current_scale) + x_offset
                     bbox_y1 = int(float(box[1]) * current_scale) + y_offset
                     bbox_x2 = int(float(box[2]) * current_scale) + x_offset
                     bbox_y2 = int(float(box[3]) * current_scale) + y_offset
                     
-                    # 检查点击位置
+                    # Check click position
                     mouse_x = event.pos().x()
                     mouse_y = event.pos().y()
                     
-                    # 检查四个角的手柄（使用更大的检测区域）
+                    # Check four corner handles (using larger detection area)
                     
-                    # 计算各手柄中心位置（与绘制位置一致）
+                    # Calculate handle center positions (consistent with drawing positions)
                     handle_centers = {
                         "top_left": (bbox_x1, bbox_y1),
                         "top_right": (bbox_x2, bbox_y1),
@@ -476,36 +476,36 @@ class ImageDisplayWidget(QWidget):
                         "bottom_right": (bbox_x2, bbox_y2)
                     }
                     
-                    # 使用手柄中心位置进行检测（矩形区域检测）
+                    # Use handle center positions for detection (rectangular area detection)
                     handle_half_size = handle_size // 2
                     
-                    # 检查鼠标是否在手柄的矩形区域内
+                    # Check if mouse is in handle's rectangular area
                     def is_in_handle_rect(mx, my, hx, hy):
                         return (hx - handle_half_size <= mx <= hx + handle_half_size and 
                                 hy - handle_half_size <= my <= hy + handle_half_size)
                     
                     if is_in_handle_rect(mouse_x, mouse_y, handle_centers["bottom_right"][0], handle_centers["bottom_right"][1]):
-                        # 点击右下角调整手柄
+                        # Clicked bottom-right resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "bottom_right"
                         self.handle_click_stats["detected"] += 1
                     elif is_in_handle_rect(mouse_x, mouse_y, handle_centers["top_left"][0], handle_centers["top_left"][1]):
-                        # 点击左上角调整手柄
+                        # Clicked top-left resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "top_left"
                         self.handle_click_stats["detected"] += 1
                     elif is_in_handle_rect(mouse_x, mouse_y, handle_centers["top_right"][0], handle_centers["top_right"][1]):
-                        # 点击右上角调整手柄
+                        # Clicked top-right resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "top_right"
                         self.handle_click_stats["detected"] += 1
                     elif is_in_handle_rect(mouse_x, mouse_y, handle_centers["bottom_left"][0], handle_centers["bottom_left"][1]):
-                        # 点击左下角调整手柄
+                        # Clicked bottom-left resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "bottom_left"
                         self.handle_click_stats["detected"] += 1
                     else:
-                        # 点击边界框内部，进行移动
+                        # Clicked inside bounding box, perform move
                         self.drag_mode = "move"
                         self.resize_handle = None
                     
@@ -514,20 +514,20 @@ class ImageDisplayWidget(QWidget):
                     self.drag_start_pos = pos
                     self.drag_bbox_index = i
                     self.bbox_clicked.emit(i)
-                    self.update()  # 重绘
+                    self.update()  # Redraw
                     bbox_clicked = True
                     break
             
-            # 记录点击位置（用于缩放中心）
+            # Record click position (for zoom center)
             self.last_click_pos = pos
             
-            # 如果没有点击边界框，则开始平移图像
+            # If no bounding box was clicked, start panning image
             if not bbox_clicked:
                 self.panning = True
                 self.pan_start_pos = pos
-                self.setCursor(Qt.ClosedHandCursor)  # 设置手型光标
+                self.setCursor(Qt.ClosedHandCursor)  # Set hand cursor
 
-# === 主窗口 ===
+# === Main Window ===
 class AnnotationToolWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -544,35 +544,35 @@ class AnnotationToolWindow(QMainWindow):
         self.load_frame(0)
         
     def init_ui(self):
-        """初始化用户界面"""
+        """Initialize user interface"""
         self.setWindowTitle("🎯 PyQt Image Annotation Tool")
-        self.setGeometry(100, 100, 2000, 1400)  # 进一步增大窗口尺寸
+        self.setGeometry(100, 100, 2000, 1400)  # Further increase window size
         
-        # 创建中央部件
+        # Create central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # 主布局
+        # Main layout
         main_layout = QHBoxLayout(central_widget)
         
-        # 创建分割器
+        # Create splitter
         splitter = QSplitter(Qt.Horizontal)
         main_layout.addWidget(splitter)
         
-        # 左侧图像显示区域
+        # Left image display area
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         
-        # 图像显示组件
+        # Image display component
         self.image_display = ImageDisplayWidget()
         self.image_display.bbox_clicked.connect(self.on_bbox_clicked)
         self.image_display.zoom_changed.connect(self.on_zoom_changed)
         left_layout.addWidget(self.image_display)
         
-        # 添加弹性空间，让图像显示区域占据更多空间
+        # Add stretch space to let image display area occupy more space
         left_layout.addStretch()
         
-        # 简化的帧控制（更紧凑，放在底部）
+        # Simplified frame control (more compact, placed at bottom)
         frame_control_layout = QHBoxLayout()
         
         self.prev_btn = QPushButton("⬅️")
@@ -582,7 +582,7 @@ class AnnotationToolWindow(QMainWindow):
         self.frame_slider.setMaximum(self.total_frames - 1)
         self.frame_label = QLabel(f"Frame 1/{self.total_frames}")
         
-        # 设置按钮和标签的最小尺寸
+        # Set minimum size for buttons and labels
         self.prev_btn.setMaximumWidth(40)
         self.next_btn.setMaximumWidth(40)
         self.frame_label.setMaximumWidth(80)
@@ -594,36 +594,36 @@ class AnnotationToolWindow(QMainWindow):
         
         left_layout.addLayout(frame_control_layout)
         
-        # 缩放控制（隐藏显示但保留功能）
+        # Zoom control (hidden display but functionality preserved)
         self.zoom_label = QLabel("Zoom: 100% (Mouse wheel to zoom, Drag to pan, Double-click to reset)")
-        # 不添加到布局中，但保留引用以支持缩放功能
+        # Not added to layout, but keep reference to support zoom functionality
         
-        # 文件信息（移除以节省空间）
+        # File information (removed to save space)
         # self.file_info_label = QLabel("File Information")
         # left_layout.addWidget(self.file_info_label)
         
         splitter.addWidget(left_widget)
         
-        # 设置分割器比例，让左侧图像区域更大
-        splitter.setSizes([1200, 300])  # 左侧1200像素，右侧300像素
+        # Set splitter ratio to make left image area larger
+        splitter.setSizes([1200, 300])  # Left 1200 pixels, right 300 pixels
         
-        # 右侧控制面板
+        # Right control panel
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         
-        # 标注框列表（简化标题）
-        bbox_group = QGroupBox("📋 BBox List")
+        # Bounding box list (simplified title)
+        bbox_group = QGroupBox("BBox List")
         bbox_layout = QVBoxLayout(bbox_group)
         
         self.bbox_list = QListWidget()
-        # 移除高度限制，让列表撑满整个GroupBox
+        # Remove height limit to let list fill entire GroupBox
         self.bbox_list.currentRowChanged.connect(self.on_bbox_list_selection)
         bbox_layout.addWidget(self.bbox_list)
         
         right_layout.addWidget(bbox_group)
         
-        # 编辑控件（简化标题和标签）
-        edit_group = QGroupBox("✏️ Edit")
+        # Edit controls (simplified title and labels)
+        edit_group = QGroupBox("Edit")
         edit_layout = QGridLayout(edit_group)
         
         edit_layout.addWidget(QLabel("Class:"), 0, 0)
@@ -650,7 +650,7 @@ class AnnotationToolWindow(QMainWindow):
         self.y2_input.setMaximum(9999)
         edit_layout.addWidget(self.y2_input, 4, 1)
         
-        # 编辑按钮
+        # Edit buttons
         button_layout = QHBoxLayout()
         self.rename_btn = QPushButton("Rename")
         button_layout.addWidget(self.rename_btn)
@@ -658,8 +658,8 @@ class AnnotationToolWindow(QMainWindow):
         
         right_layout.addWidget(edit_group)
         
-        # 操作按钮（简化标题）
-        operation_group = QGroupBox("🛠️ Actions")
+        # Operation buttons (simplified title)
+        operation_group = QGroupBox("Actions")
         operation_layout = QVBoxLayout(operation_group)
         
         operation_button_layout = QHBoxLayout()
@@ -669,19 +669,19 @@ class AnnotationToolWindow(QMainWindow):
         operation_button_layout.addWidget(self.delete_bbox_btn)
         operation_layout.addLayout(operation_button_layout)
         
-        self.save_btn = QPushButton("💾 Save")
+        self.save_btn = QPushButton("Save")
         operation_layout.addWidget(self.save_btn)
         
         right_layout.addWidget(operation_group)
         
-        # 导出功能（简化标题）
-        export_group = QGroupBox("📤 Export")
+        # Export functionality (simplified title)
+        export_group = QGroupBox("Export")
         export_layout = QVBoxLayout(export_group)
         
         self.export_json_btn = QPushButton("Export JSON")
         export_layout.addWidget(self.export_json_btn)
         
-        # 导出选项
+        # Export options
         self.export_format_combo = QComboBox()
         self.export_format_combo.addItems(["Current Frame", "All Frames"])
         export_layout.addWidget(QLabel("Range:"))
@@ -689,23 +689,23 @@ class AnnotationToolWindow(QMainWindow):
         
         right_layout.addWidget(export_group)
         
-        # 状态显示（简化）
+        # Status display (simplified)
         self.status_text = QTextEdit()
-        self.status_text.setMaximumHeight(50)  # 进一步减小状态区域高度
+        self.status_text.setMaximumHeight(50)  # Further reduce status area height
         self.status_text.setReadOnly(True)
         right_layout.addWidget(QLabel("Status:"))
         right_layout.addWidget(self.status_text)
         
         splitter.addWidget(right_widget)
         
-        # 设置分割器比例 - 让左侧图像区域更大
-        splitter.setSizes([1500, 250])  # 左侧1500像素，右侧250像素
+        # Set splitter ratio - make left image area larger
+        splitter.setSizes([1500, 250])  # Left 1500 pixels, right 250 pixels
         
-        # 连接信号
+        # Connect signals
         self.connect_signals()
         
     def connect_signals(self):
-        """连接信号和槽"""
+        """Connect signals and slots"""
         self.prev_btn.clicked.connect(self.previous_frame)
         self.next_btn.clicked.connect(self.next_frame)
         self.frame_slider.valueChanged.connect(self.on_frame_slider_changed)
@@ -717,24 +717,24 @@ class AnnotationToolWindow(QMainWindow):
         
         self.export_json_btn.clicked.connect(self.export_json)
         
-        # 连接坐标输入框的实时更新信号
+        # Connect coordinate input box real-time update signals
         self.x1_input.valueChanged.connect(self.on_coord_changed)
         self.y1_input.valueChanged.connect(self.on_coord_changed)
         self.x2_input.valueChanged.connect(self.on_coord_changed)
         self.y2_input.valueChanged.connect(self.on_coord_changed)
         
-        # 缩放控制信号已通过鼠标滚轮实现
+        # Zoom control signals already implemented through mouse wheel
         
     def load_frame(self, frame_index):
-        """加载指定帧"""
+        """Load specified frame"""
         if 0 <= frame_index < self.total_frames:
             self.current_frame_index = frame_index
             
-            # 加载图像
+            # Load image
             img_path, json_path = self.matched_pairs[frame_index]
             self.image_display.set_image(img_path)
             
-            # 加载标注
+            # Load annotations
             try:
                 with open(json_path, 'r') as f:
                     self.current_annotations = json.load(f)
@@ -742,116 +742,116 @@ class AnnotationToolWindow(QMainWindow):
                 self.current_annotations = []
                 self.log_status(f"⚠️ Error loading annotations: {e}")
             
-            # 更新界面
+            # Update interface
             self.update_ui()
             self.log_status(f"✅ Loaded frame {frame_index + 1}: {img_path.name}")
             
     def update_ui(self):
-        """更新用户界面"""
-        # 更新帧信息
+        """Update user interface"""
+        # Update frame information
         self.frame_label.setText(f"Frame {self.current_frame_index + 1}/{self.total_frames}")
         self.frame_slider.setValue(self.current_frame_index)
         
-        # 更新文件信息（已移除显示）
+        # Update file information (display removed)
         # img_path, json_path = self.matched_pairs[self.current_frame_index]
         # self.file_info_label.setText(f"Image: {img_path.name}\nJSON: {json_path.name}")
         
-        # 更新标注框列表
+        # Update bounding box list
         self.update_bbox_list()
         
-        # 更新图像显示
+        # Update image display
         self.image_display.set_annotations(self.current_annotations)
         
-        # 确保没有选中的边界框（初始状态）
+        # Ensure no bounding box is selected (initial state)
         self.image_display.set_selected_bbox(-1)
         
     def update_bbox_list(self):
-        """更新标注框列表"""
+        """Update bounding box list"""
         self.bbox_list.clear()
         for i, ann in enumerate(self.current_annotations):
             self.bbox_list.addItem(f"{i}: {ann['class']} {ann['box']}")
             
     def on_frame_slider_changed(self, value):
-        """帧滑块改变事件"""
+        """Frame slider change event"""
         if value != self.current_frame_index:
             self.load_frame(value)
             
     def previous_frame(self):
-        """上一帧"""
+        """Previous frame"""
         if self.current_frame_index > 0:
             self.load_frame(self.current_frame_index - 1)
             
     def next_frame(self):
-        """下一帧"""
+        """Next frame"""
         if self.current_frame_index < self.total_frames - 1:
             self.load_frame(self.current_frame_index + 1)
             
     def on_bbox_clicked(self, bbox_index):
-        """边界框点击事件"""
+        """Bounding box click event"""
         self.bbox_list.setCurrentRow(bbox_index)
         self.image_display.set_selected_bbox(bbox_index)
         self.update_inputs()
         
     def on_zoom_changed(self, scale_factor):
-        """缩放变化事件"""
+        """Zoom change event"""
         self.zoom_label.setText(f"Zoom: {int(scale_factor * 100)}%")
         
     def on_coord_changed(self):
-        """坐标输入框变化事件 - 实时更新边界框"""
+        """Coordinate input box change event - real-time update bounding box"""
         current_row = self.bbox_list.currentRow()
         if current_row < 0 or current_row >= len(self.current_annotations):
             return
             
-        # 获取当前输入的值
+        # Get current input values
         x1 = self.x1_input.value()
         y1 = self.y1_input.value()
         x2 = self.x2_input.value()
         y2 = self.y2_input.value()
         
-        # 验证坐标有效性
+        # Validate coordinate validity
         if x1 >= x2 or y1 >= y2:
-            return  # 无效坐标，不更新
+            return  # Invalid coordinates, don't update
             
-        # 更新当前边界框的坐标
+        # Update current bounding box coordinates
         self.current_annotations[current_row]['box'] = [int(x1), int(y1), int(x2), int(y2)]
         
-        # 实时更新图像显示
+        # Real-time update image display
         self.image_display.set_annotations(self.current_annotations)
         
-        # 更新列表显示
+        # Update list display
         self.update_bbox_list()
         
-        # 保持当前选中状态
+        # Maintain current selection
         self.bbox_list.setCurrentRow(current_row)
         
 
         
     def on_bbox_list_selection(self, row):
-        """标注框列表选择事件"""
+        """Bounding box list selection event"""
         if 0 <= row < len(self.current_annotations):
             self.image_display.set_selected_bbox(row)
             self.update_inputs()
             
     def update_inputs(self):
-        """更新输入框"""
+        """Update input boxes"""
         current_row = self.bbox_list.currentRow()
         if 0 <= current_row < len(self.current_annotations):
             bbox = self.current_annotations[current_row]
             self.class_input.setText(bbox['class'])
             
-            # 临时断开信号连接，避免触发实时更新
+            # Temporarily disconnect signal connections to avoid triggering real-time updates
             self.x1_input.valueChanged.disconnect()
             self.y1_input.valueChanged.disconnect()
             self.x2_input.valueChanged.disconnect()
             self.y2_input.valueChanged.disconnect()
             
-            # 将浮点数转换为整数
+            # Convert float to integer
             self.x1_input.setValue(int(bbox['box'][0]))
             self.y1_input.setValue(int(bbox['box'][1]))
             self.x2_input.setValue(int(bbox['box'][2]))
             self.y2_input.setValue(int(bbox['box'][3]))
             
-            # 重新连接信号
+            # Reconnect signals
             self.x1_input.valueChanged.connect(self.on_coord_changed)
             self.y1_input.valueChanged.connect(self.on_coord_changed)
             self.x2_input.valueChanged.connect(self.on_coord_changed)
@@ -860,7 +860,7 @@ class AnnotationToolWindow(QMainWindow):
             self.clear_inputs()
             
     def clear_inputs(self):
-        """清空输入框"""
+        """Clear input boxes"""
         self.class_input.clear()
         self.x1_input.setValue(0)
         self.y1_input.setValue(0)
@@ -869,7 +869,7 @@ class AnnotationToolWindow(QMainWindow):
         
 
     def rename_bbox(self):
-        """重命名边界框"""
+        """Rename bounding box"""
         current_row = self.bbox_list.currentRow()
         if current_row < 0:
             QMessageBox.warning(self, "Warning", "Please select a bounding box first")
@@ -882,20 +882,20 @@ class AnnotationToolWindow(QMainWindow):
             
         self.current_annotations[current_row]['class'] = new_class
         
-        # 只更新图像显示和列表，不清空输入框
+        # Only update image display and list, don't clear input boxes
         self.image_display.set_annotations(self.current_annotations)
         self.update_bbox_list()
         
         self.log_status(f"✅ Renamed bounding box {current_row} to: {new_class}")
         
     def add_bbox(self):
-        """添加边界框"""
-        # 获取图像尺寸
+        """Add bounding box"""
+        # Get image dimensions
         img_path, _ = self.matched_pairs[self.current_frame_index]
         with Image.open(img_path) as img:
             width, height = img.size
             
-        # 在图像中心添加边界框
+        # Add bounding box at image center
         center_x, center_y = width // 2, height // 2
         size = 100
         
@@ -911,7 +911,7 @@ class AnnotationToolWindow(QMainWindow):
         self.log_status("✅ Added new bounding box")
         
     def delete_bbox(self):
-        """删除边界框"""
+        """Delete bounding box"""
         current_row = self.bbox_list.currentRow()
         if current_row < 0:
             QMessageBox.warning(self, "Warning", "Please select a bounding box first")
@@ -929,7 +929,7 @@ class AnnotationToolWindow(QMainWindow):
             self.log_status(f"✅ Deleted bounding box {current_row}: {deleted_class}")
             
     def save_annotations(self):
-        """保存标注"""
+        """Save annotations"""
         _, json_path = self.matched_pairs[self.current_frame_index]
         try:
             with open(json_path, 'w') as f:
@@ -939,7 +939,7 @@ class AnnotationToolWindow(QMainWindow):
             self.log_status(f"❌ Save failed: {e}")
             
     def export_json(self):
-        """导出JSON格式"""
+        """Export JSON format"""
         export_range = self.export_format_combo.currentText()
         
         if export_range == "Current Frame":
@@ -962,7 +962,7 @@ class AnnotationToolWindow(QMainWindow):
                 except Exception as e:
                     self.log_status(f"⚠️ Failed to load frame {i} annotations: {e}")
         
-        # 选择保存路径
+        # Choose save path
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export JSON", "annotations_export.json", "JSON Files (*.json)")
         
@@ -975,7 +975,7 @@ class AnnotationToolWindow(QMainWindow):
                 self.log_status(f"❌ Export failed: {e}")
                 
     def log_status(self, message):
-        """记录状态信息"""
+        """Log status information"""
         self.status_text.append(f"[{QApplication.instance().applicationName()}] {message}")
         self.status_text.ensureCursorVisible()
         
@@ -985,7 +985,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("PyQt Annotation Tool")
     
-    # 检查依赖
+    # Check dependencies
     try:
         import cv2
     except ImportError:

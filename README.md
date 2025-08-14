@@ -38,7 +38,7 @@ pip install PyQt5 Pillow numpy opencv-python
 ### Step 2: Download and Setup
 
 1. **Download** the `pyqt_annotation_tool.py` file
-2. **Create** the following directory structure:
+2. **Create** the following directory structure(If not existed):
 
 ```
 annotation-tool/
