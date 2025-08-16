@@ -402,18 +402,25 @@ class ImageDisplayWidget(QWidget):
                     painter.drawRect(hx, hy, handle_size, handle_size)
             
             # Draw label
-            font = QFont("Arial", 10)
+            font = QFont("Arial", 12)  # 将字体大小从10增加到14
             painter.setFont(font)
             painter.setPen(QPen(QColor(255, 255, 0), 1))
             
+            # Get openvocab label if available
+            openvocab_label = ann.get("openvocab", "")
+            if openvocab_label:
+                display_text = f"[{label}], [{openvocab_label}] {i}"
+            else:
+                display_text = f"{label} {i}"
+            
             # Label background
-            text_rect = painter.fontMetrics().boundingRect(f"{label} {i}")
+            text_rect = painter.fontMetrics().boundingRect(display_text)
             painter.fillRect(int(x1), int(y1 - text_rect.height() - 5), 
                            text_rect.width() + 10, text_rect.height() + 5, 
                            QColor(0, 0, 0, 180))
             
             # Draw text
-            painter.drawText(int(x1 + 5), int(y1 - 5), f"{label} {i}")
+            painter.drawText(int(x1 + 5), int(y1 - 5), display_text)
     
     def mousePressEvent(self, event):
         """Mouse click event"""
@@ -535,6 +542,7 @@ class AnnotationToolWindow(QMainWindow):
         self.total_frames = len(self.matched_pairs)
         self.current_frame_index = 0
         self.current_annotations = []
+        self.is_modified = False  # Track if current frame has been modified
         
         if self.total_frames == 0:
             QMessageBox.critical(self, "Error", "No matching image/JSON file pairs found!")
@@ -616,7 +624,8 @@ class AnnotationToolWindow(QMainWindow):
         bbox_layout = QVBoxLayout(bbox_group)
         
         self.bbox_list = QListWidget()
-        # Remove height limit to let list fill entire GroupBox
+        # Set maximum height to limit BBox List size
+        self.bbox_list.setMaximumHeight(200)
         self.bbox_list.currentRowChanged.connect(self.on_bbox_list_selection)
         bbox_layout.addWidget(self.bbox_list)
         
@@ -628,33 +637,39 @@ class AnnotationToolWindow(QMainWindow):
         
         edit_layout.addWidget(QLabel("Class:"), 0, 0)
         self.class_input = QLineEdit()
+        self.class_input.returnPressed.connect(self.on_class_enter_pressed)
         edit_layout.addWidget(self.class_input, 0, 1)
         
-        edit_layout.addWidget(QLabel("X1:"), 1, 0)
+        edit_layout.addWidget(QLabel("OpenVocab:"), 1, 0)
+        self.openvocab_input = QLineEdit()
+        self.openvocab_input.returnPressed.connect(self.on_openvocab_enter_pressed)
+        edit_layout.addWidget(self.openvocab_input, 1, 1)
+        
+        edit_layout.addWidget(QLabel("X1:"), 2, 0)
         self.x1_input = QSpinBox()
         self.x1_input.setMaximum(9999)
-        edit_layout.addWidget(self.x1_input, 1, 1)
+        edit_layout.addWidget(self.x1_input, 2, 1)
         
-        edit_layout.addWidget(QLabel("Y1:"), 2, 0)
+        edit_layout.addWidget(QLabel("Y1:"), 3, 0)
         self.y1_input = QSpinBox()
         self.y1_input.setMaximum(9999)
-        edit_layout.addWidget(self.y1_input, 2, 1)
+        edit_layout.addWidget(self.y1_input, 3, 1)
         
-        edit_layout.addWidget(QLabel("X2:"), 3, 0)
+        edit_layout.addWidget(QLabel("X2:"), 4, 0)
         self.x2_input = QSpinBox()
         self.x2_input.setMaximum(9999)
-        edit_layout.addWidget(self.x2_input, 3, 1)
+        edit_layout.addWidget(self.x2_input, 4, 1)
         
-        edit_layout.addWidget(QLabel("Y2:"), 4, 0)
+        edit_layout.addWidget(QLabel("Y2:"), 5, 0)
         self.y2_input = QSpinBox()
         self.y2_input.setMaximum(9999)
-        edit_layout.addWidget(self.y2_input, 4, 1)
+        edit_layout.addWidget(self.y2_input, 5, 1)
         
-        # Edit buttons
-        button_layout = QHBoxLayout()
-        self.rename_btn = QPushButton("Rename")
-        button_layout.addWidget(self.rename_btn)
-        edit_layout.addLayout(button_layout, 5, 0, 1, 2)
+        # Edit buttons - removed rename button
+        # button_layout = QHBoxLayout()
+        # self.rename_btn = QPushButton("Rename")
+        # button_layout.addWidget(self.rename_btn)
+        # edit_layout.addLayout(button_layout, 6, 0, 1, 2)
         
         right_layout.addWidget(edit_group)
         
@@ -674,24 +689,9 @@ class AnnotationToolWindow(QMainWindow):
         
         right_layout.addWidget(operation_group)
         
-        # Export functionality (simplified title)
-        export_group = QGroupBox("Export")
-        export_layout = QVBoxLayout(export_group)
-        
-        self.export_json_btn = QPushButton("Export JSON")
-        export_layout.addWidget(self.export_json_btn)
-        
-        # Export options
-        self.export_format_combo = QComboBox()
-        self.export_format_combo.addItems(["Current Frame", "All Frames"])
-        export_layout.addWidget(QLabel("Range:"))
-        export_layout.addWidget(self.export_format_combo)
-        
-        right_layout.addWidget(export_group)
-        
         # Status display (simplified)
         self.status_text = QTextEdit()
-        self.status_text.setMaximumHeight(50)  # Further reduce status area height
+        self.status_text.setMinimumHeight(100)  # Increase status area height
         self.status_text.setReadOnly(True)
         right_layout.addWidget(QLabel("Status:"))
         right_layout.addWidget(self.status_text)
@@ -710,12 +710,12 @@ class AnnotationToolWindow(QMainWindow):
         self.next_btn.clicked.connect(self.next_frame)
         self.frame_slider.valueChanged.connect(self.on_frame_slider_changed)
         
-        self.rename_btn.clicked.connect(self.rename_bbox)
+        # self.rename_btn.clicked.connect(self.rename_bbox)  # Removed rename button
         self.add_bbox_btn.clicked.connect(self.add_bbox)
         self.delete_bbox_btn.clicked.connect(self.delete_bbox)
         self.save_btn.clicked.connect(self.save_annotations)
         
-        self.export_json_btn.clicked.connect(self.export_json)
+        # self.export_json_btn.clicked.connect(self.export_json)  # Removed export functionality
         
         # Connect coordinate input box real-time update signals
         self.x1_input.valueChanged.connect(self.on_coord_changed)
@@ -728,6 +728,20 @@ class AnnotationToolWindow(QMainWindow):
     def load_frame(self, frame_index):
         """Load specified frame"""
         if 0 <= frame_index < self.total_frames:
+            # Check if current frame has unsaved changes
+            if self.is_modified:
+                reply = QMessageBox.question(
+                    self, 
+                    "Unsaved Changes", 
+                    f"Frame {self.current_frame_index + 1} has unsaved changes. Do you want to save before switching?",
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+                )
+                
+                if reply == QMessageBox.Yes:
+                    self.save_annotations()
+                elif reply == QMessageBox.Cancel:
+                    return  # Cancel the frame switch
+            
             self.current_frame_index = frame_index
             
             # Load image
@@ -742,8 +756,15 @@ class AnnotationToolWindow(QMainWindow):
                 self.current_annotations = []
                 self.log_status(f"⚠️ Error loading annotations: {e}")
             
+            # Reset modified flag for new frame
+            self.is_modified = False
+            
             # Update interface
             self.update_ui()
+            
+            # Clear edit inputs when switching frames
+            self.clear_inputs()
+            
             self.log_status(f"✅ Loaded frame {frame_index + 1}: {img_path.name}")
             
     def update_ui(self):
@@ -752,9 +773,6 @@ class AnnotationToolWindow(QMainWindow):
         self.frame_label.setText(f"Frame {self.current_frame_index + 1}/{self.total_frames}")
         self.frame_slider.setValue(self.current_frame_index)
         
-        # Update file information (display removed)
-        # img_path, json_path = self.matched_pairs[self.current_frame_index]
-        # self.file_info_label.setText(f"Image: {img_path.name}\nJSON: {json_path.name}")
         
         # Update bounding box list
         self.update_bbox_list()
@@ -769,7 +787,11 @@ class AnnotationToolWindow(QMainWindow):
         """Update bounding box list"""
         self.bbox_list.clear()
         for i, ann in enumerate(self.current_annotations):
-            self.bbox_list.addItem(f"{i}: {ann['class']} {ann['box']}")
+            openvocab_label = ann.get("openvocab", "")
+            if openvocab_label:
+                self.bbox_list.addItem(f"{i}: {ann['class']} [{openvocab_label}] {ann['box']}")
+            else:
+                self.bbox_list.addItem(f"{i}: {ann['class']} {ann['box']}")
             
     def on_frame_slider_changed(self, value):
         """Frame slider change event"""
@@ -814,6 +836,7 @@ class AnnotationToolWindow(QMainWindow):
             
         # Update current bounding box coordinates
         self.current_annotations[current_row]['box'] = [int(x1), int(y1), int(x2), int(y2)]
+        self.is_modified = True  # Mark as modified
         
         # Real-time update image display
         self.image_display.set_annotations(self.current_annotations)
@@ -838,6 +861,7 @@ class AnnotationToolWindow(QMainWindow):
         if 0 <= current_row < len(self.current_annotations):
             bbox = self.current_annotations[current_row]
             self.class_input.setText(bbox['class'])
+            self.openvocab_input.setText(bbox.get('openvocab', ''))
             
             # Temporarily disconnect signal connections to avoid triggering real-time updates
             self.x1_input.valueChanged.disconnect()
@@ -862,6 +886,7 @@ class AnnotationToolWindow(QMainWindow):
     def clear_inputs(self):
         """Clear input boxes"""
         self.class_input.clear()
+        self.openvocab_input.clear()
         self.x1_input.setValue(0)
         self.y1_input.setValue(0)
         self.x2_input.setValue(0)
@@ -876,17 +901,87 @@ class AnnotationToolWindow(QMainWindow):
             return
             
         new_class = self.class_input.text().strip()
+        new_openvocab = self.openvocab_input.text().strip()
+        
         if not new_class:
             QMessageBox.warning(self, "Warning", "Please enter a class name")
             return
             
         self.current_annotations[current_row]['class'] = new_class
+        if new_openvocab:
+            self.current_annotations[current_row]['openvocab'] = new_openvocab
+        elif 'openvocab' in self.current_annotations[current_row]:
+            del self.current_annotations[current_row]['openvocab']
+        
+        self.is_modified = True  # Mark as modified
         
         # Only update image display and list, don't clear input boxes
         self.image_display.set_annotations(self.current_annotations)
         self.update_bbox_list()
         
-        self.log_status(f"✅ Renamed bounding box {current_row} to: {new_class}")
+        # Maintain selection
+        self.bbox_list.setCurrentRow(current_row)
+        self.image_display.set_selected_bbox(current_row)
+        
+        if new_openvocab:
+            self.log_status(f"✅ Updated bounding box {current_row}: class={new_class}, openvocab={new_openvocab}")
+        else:
+            self.log_status(f"✅ Updated bounding box {current_row}: class={new_class}")
+        
+        
+    def on_class_enter_pressed(self):
+        """Handle Enter key press in class input"""
+        current_row = self.bbox_list.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "Warning", "Please select a bounding box first")
+            return
+            
+        new_class = self.class_input.text().strip()
+        if not new_class:
+            QMessageBox.warning(self, "Warning", "Please enter a class name")
+            return
+            
+        self.current_annotations[current_row]['class'] = new_class
+        self.is_modified = True  # Mark as modified
+        
+        # Update image display and list
+        self.image_display.set_annotations(self.current_annotations)
+        self.update_bbox_list()
+        
+        # Maintain selection
+        self.bbox_list.setCurrentRow(current_row)
+        self.image_display.set_selected_bbox(current_row)
+        
+        self.log_status(f"✅ Updated class to: {new_class}")
+        
+    def on_openvocab_enter_pressed(self):
+        """Handle Enter key press in openvocab input"""
+        current_row = self.bbox_list.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "Warning", "Please select a bounding box first")
+            return
+            
+        new_openvocab = self.openvocab_input.text().strip()
+        
+        if new_openvocab:
+            self.current_annotations[current_row]['openvocab'] = new_openvocab
+        elif 'openvocab' in self.current_annotations[current_row]:
+            del self.current_annotations[current_row]['openvocab']
+        
+        self.is_modified = True  # Mark as modified
+        
+        # Update image display and list
+        self.update_bbox_list()
+        self.image_display.set_annotations(self.current_annotations)
+        
+        # Maintain selection
+        self.bbox_list.setCurrentRow(current_row)
+        self.image_display.set_selected_bbox(current_row)
+        
+        if new_openvocab:
+            self.log_status(f"✅ Updated openvocab to: {new_openvocab}")
+        else:
+            self.log_status(f"✅ Removed openvocab label")
         
     def add_bbox(self):
         """Add bounding box"""
@@ -907,6 +1002,7 @@ class AnnotationToolWindow(QMainWindow):
         }
         
         self.current_annotations.append(new_bbox)
+        self.is_modified = True  # Mark as modified
         self.update_ui()
         self.log_status("✅ Added new bounding box")
         
@@ -924,6 +1020,7 @@ class AnnotationToolWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             deleted_class = self.current_annotations[current_row]['class']
             del self.current_annotations[current_row]
+            self.is_modified = True  # Mark as modified
             self.update_ui()
             self.clear_inputs()
             self.log_status(f"✅ Deleted bounding box {current_row}: {deleted_class}")
@@ -934,45 +1031,12 @@ class AnnotationToolWindow(QMainWindow):
         try:
             with open(json_path, 'w') as f:
                 json.dump(self.current_annotations, f, indent=2)
+            self.is_modified = False  # Reset modified flag after successful save
             self.log_status(f"✅ Saved to: {json_path.name}")
         except Exception as e:
             self.log_status(f"❌ Save failed: {e}")
             
-    def export_json(self):
-        """Export JSON format"""
-        export_range = self.export_format_combo.currentText()
-        
-        if export_range == "Current Frame":
-            data_to_export = [{
-                "frame": self.current_frame_index,
-                "image": self.matched_pairs[self.current_frame_index][0].name,
-                "annotations": self.current_annotations
-            }]
-        else:  # All Frames
-            data_to_export = []
-            for i, (img_path, json_path) in enumerate(self.matched_pairs):
-                try:
-                    with open(json_path, 'r') as f:
-                        annotations = json.load(f)
-                    data_to_export.append({
-                        "frame": i,
-                        "image": img_path.name,
-                        "annotations": annotations
-                    })
-                except Exception as e:
-                    self.log_status(f"⚠️ Failed to load frame {i} annotations: {e}")
-        
-        # Choose save path
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export JSON", "annotations_export.json", "JSON Files (*.json)")
-        
-        if file_path:
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(data_to_export, f, indent=2, ensure_ascii=False)
-                self.log_status(f"✅ Exported to: {file_path}")
-            except Exception as e:
-                self.log_status(f"❌ Export failed: {e}")
+
                 
     def log_status(self, message):
         """Log status information"""
