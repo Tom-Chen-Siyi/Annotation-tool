@@ -406,12 +406,8 @@ class ImageDisplayWidget(QWidget):
             painter.setFont(font)
             painter.setPen(QPen(QColor(255, 255, 0), 1))
             
-            # Get openvocab label if available
-            openvocab_label = ann.get("openvocab", "")
-            if openvocab_label:
-                display_text = f"[{label}], [{openvocab_label}] {i}"
-            else:
-                display_text = f"{label} {i}"
+            # Only show class and index (OpenVocab removed)
+            display_text = f"{label} {i}"
             
             # Label background
             text_rect = painter.fontMetrics().boundingRect(display_text)
@@ -543,6 +539,7 @@ class AnnotationToolWindow(QMainWindow):
         self.current_frame_index = 0
         self.current_annotations = []
         self.is_modified = False  # Track if current frame has been modified
+        self.updating_inputs = False  # Suppress textChanged side-effects during UI updates
         
         if self.total_frames == 0:
             QMessageBox.critical(self, "Error", "No matching image/JSON file pairs found!")
@@ -612,11 +609,12 @@ class AnnotationToolWindow(QMainWindow):
         
         splitter.addWidget(left_widget)
         
-        # Set splitter ratio to make left image area larger
-        splitter.setSizes([1200, 300])  # Left 1200 pixels, right 300 pixels
+        # Set splitter ratio
+        splitter.setSizes([1200, 500])  # Increase right panel width
         
         # Right control panel
         right_widget = QWidget()
+        right_widget.setMinimumWidth(500)  # Ensure a wider right panel
         right_layout = QVBoxLayout(right_widget)
         
         # Bounding box list (simplified title)
@@ -640,30 +638,38 @@ class AnnotationToolWindow(QMainWindow):
         self.class_input.returnPressed.connect(self.on_class_enter_pressed)
         edit_layout.addWidget(self.class_input, 0, 1)
         
-        edit_layout.addWidget(QLabel("OpenVocab:"), 1, 0)
-        self.openvocab_input = QLineEdit()
-        self.openvocab_input.returnPressed.connect(self.on_openvocab_enter_pressed)
-        edit_layout.addWidget(self.openvocab_input, 1, 1)
+        # OpenVocab removed
+
+        edit_layout.addWidget(QLabel("Class Detailed:"), 2, 0)
+        self.class_detailed_input = QLineEdit()
+        self.class_detailed_input.returnPressed.connect(self.on_class_detailed_enter_pressed)
+        edit_layout.addWidget(self.class_detailed_input, 2, 1)
+
+        edit_layout.addWidget(QLabel("Detailed Caption:"), 3, 0)
+        self.detailed_caption_input = QTextEdit()
+        self.detailed_caption_input.setMinimumHeight(120)
+        self.detailed_caption_input.setLineWrapMode(QTextEdit.WidgetWidth)
+        edit_layout.addWidget(self.detailed_caption_input, 3, 1)
         
-        edit_layout.addWidget(QLabel("X1:"), 2, 0)
+        edit_layout.addWidget(QLabel("X1:"), 4, 0)
         self.x1_input = QSpinBox()
         self.x1_input.setMaximum(9999)
-        edit_layout.addWidget(self.x1_input, 2, 1)
+        edit_layout.addWidget(self.x1_input, 4, 1)
         
-        edit_layout.addWidget(QLabel("Y1:"), 3, 0)
+        edit_layout.addWidget(QLabel("Y1:"), 5, 0)
         self.y1_input = QSpinBox()
         self.y1_input.setMaximum(9999)
-        edit_layout.addWidget(self.y1_input, 3, 1)
+        edit_layout.addWidget(self.y1_input, 5, 1)
         
-        edit_layout.addWidget(QLabel("X2:"), 4, 0)
+        edit_layout.addWidget(QLabel("X2:"), 6, 0)
         self.x2_input = QSpinBox()
         self.x2_input.setMaximum(9999)
-        edit_layout.addWidget(self.x2_input, 4, 1)
+        edit_layout.addWidget(self.x2_input, 6, 1)
         
-        edit_layout.addWidget(QLabel("Y2:"), 5, 0)
+        edit_layout.addWidget(QLabel("Y2:"), 7, 0)
         self.y2_input = QSpinBox()
         self.y2_input.setMaximum(9999)
-        edit_layout.addWidget(self.y2_input, 5, 1)
+        edit_layout.addWidget(self.y2_input, 7, 1)
         
         # Edit buttons - removed rename button
         # button_layout = QHBoxLayout()
@@ -698,8 +704,8 @@ class AnnotationToolWindow(QMainWindow):
         
         splitter.addWidget(right_widget)
         
-        # Set splitter ratio - make left image area larger
-        splitter.setSizes([1500, 250])  # Left 1500 pixels, right 250 pixels
+        # Set splitter ratio - increase right panel width
+        splitter.setSizes([1200, 800])  # Left ~1200, right ~800
         
         # Connect signals
         self.connect_signals()
@@ -722,6 +728,9 @@ class AnnotationToolWindow(QMainWindow):
         self.y1_input.valueChanged.connect(self.on_coord_changed)
         self.x2_input.valueChanged.connect(self.on_coord_changed)
         self.y2_input.valueChanged.connect(self.on_coord_changed)
+        # Track text edits to prompt unsaved changes
+        self.class_detailed_input.textChanged.connect(self.on_text_modified)
+        self.detailed_caption_input.textChanged.connect(self.on_text_modified)
         
         # Zoom control signals already implemented through mouse wheel
         
@@ -787,11 +796,16 @@ class AnnotationToolWindow(QMainWindow):
         """Update bounding box list"""
         self.bbox_list.clear()
         for i, ann in enumerate(self.current_annotations):
-            openvocab_label = ann.get("openvocab", "")
-            if openvocab_label:
-                self.bbox_list.addItem(f"{i}: {ann['class']} [{openvocab_label}] {ann['box']}")
-            else:
-                self.bbox_list.addItem(f"{i}: {ann['class']} {ann['box']}")
+            class_detailed = ann.get("class_detailed", "")
+            detailed_caption = ann.get("detailed_caption", "")
+            parts = [f"{i}:", ann.get('class', '')]
+            if class_detailed:
+                parts.append(f"<{class_detailed}>")
+            if detailed_caption:
+                short_cap = detailed_caption[:40] + ("…" if len(detailed_caption) > 40 else "")
+                parts.append(f"cap={short_cap}")
+            parts.append(str(ann.get('box', '')))
+            self.bbox_list.addItem(" ".join(parts))
             
     def on_frame_slider_changed(self, value):
         """Frame slider change event"""
@@ -860,8 +874,10 @@ class AnnotationToolWindow(QMainWindow):
         current_row = self.bbox_list.currentRow()
         if 0 <= current_row < len(self.current_annotations):
             bbox = self.current_annotations[current_row]
+            self.updating_inputs = True
             self.class_input.setText(bbox['class'])
-            self.openvocab_input.setText(bbox.get('openvocab', ''))
+            self.class_detailed_input.setText(bbox.get('class_detailed', ''))
+            self.detailed_caption_input.setPlainText(bbox.get('detailed_caption', ''))
             
             # Temporarily disconnect signal connections to avoid triggering real-time updates
             self.x1_input.valueChanged.disconnect()
@@ -880,17 +896,21 @@ class AnnotationToolWindow(QMainWindow):
             self.y1_input.valueChanged.connect(self.on_coord_changed)
             self.x2_input.valueChanged.connect(self.on_coord_changed)
             self.y2_input.valueChanged.connect(self.on_coord_changed)
+            self.updating_inputs = False
         else:
             self.clear_inputs()
             
     def clear_inputs(self):
         """Clear input boxes"""
+        self.updating_inputs = True
         self.class_input.clear()
-        self.openvocab_input.clear()
+        self.class_detailed_input.clear()
+        self.detailed_caption_input.clear()
         self.x1_input.setValue(0)
         self.y1_input.setValue(0)
         self.x2_input.setValue(0)
         self.y2_input.setValue(0)
+        self.updating_inputs = False
         
 
     def rename_bbox(self):
@@ -901,17 +921,12 @@ class AnnotationToolWindow(QMainWindow):
             return
             
         new_class = self.class_input.text().strip()
-        new_openvocab = self.openvocab_input.text().strip()
         
         if not new_class:
             QMessageBox.warning(self, "Warning", "Please enter a class name")
             return
             
         self.current_annotations[current_row]['class'] = new_class
-        if new_openvocab:
-            self.current_annotations[current_row]['openvocab'] = new_openvocab
-        elif 'openvocab' in self.current_annotations[current_row]:
-            del self.current_annotations[current_row]['openvocab']
         
         self.is_modified = True  # Mark as modified
         
@@ -923,10 +938,7 @@ class AnnotationToolWindow(QMainWindow):
         self.bbox_list.setCurrentRow(current_row)
         self.image_display.set_selected_bbox(current_row)
         
-        if new_openvocab:
-            self.log_status(f"✅ Updated bounding box {current_row}: class={new_class}, openvocab={new_openvocab}")
-        else:
-            self.log_status(f"✅ Updated bounding box {current_row}: class={new_class}")
+        self.log_status(f"✅ Updated bounding box {current_row}: class={new_class}")
         
         
     def on_class_enter_pressed(self):
@@ -954,34 +966,49 @@ class AnnotationToolWindow(QMainWindow):
         
         self.log_status(f"✅ Updated class to: {new_class}")
         
-    def on_openvocab_enter_pressed(self):
-        """Handle Enter key press in openvocab input"""
+    # OpenVocab handler removed
+
+    def on_class_detailed_enter_pressed(self):
+        """Handle Enter key press in class_detailed input"""
         current_row = self.bbox_list.currentRow()
         if current_row < 0:
             QMessageBox.warning(self, "Warning", "Please select a bounding box first")
             return
-            
-        new_openvocab = self.openvocab_input.text().strip()
-        
-        if new_openvocab:
-            self.current_annotations[current_row]['openvocab'] = new_openvocab
-        elif 'openvocab' in self.current_annotations[current_row]:
-            del self.current_annotations[current_row]['openvocab']
-        
-        self.is_modified = True  # Mark as modified
-        
-        # Update image display and list
+        value = self.class_detailed_input.text().strip()
+        if value:
+            self.current_annotations[current_row]['class_detailed'] = value
+        elif 'class_detailed' in self.current_annotations[current_row]:
+            del self.current_annotations[current_row]['class_detailed']
+        self.is_modified = True
         self.update_bbox_list()
         self.image_display.set_annotations(self.current_annotations)
-        
-        # Maintain selection
         self.bbox_list.setCurrentRow(current_row)
         self.image_display.set_selected_bbox(current_row)
-        
-        if new_openvocab:
-            self.log_status(f"✅ Updated openvocab to: {new_openvocab}")
+        if value:
+            self.log_status(f"✅ Updated class_detailed to: {value}")
         else:
-            self.log_status(f"✅ Removed openvocab label")
+            self.log_status("✅ Removed class_detailed")
+
+    def on_detailed_caption_enter_pressed(self):
+        """Handle Enter key press in detailed_caption input"""
+        current_row = self.bbox_list.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "Warning", "Please select a bounding box first")
+            return
+        value = self.detailed_caption_input.text().strip()
+        if value:
+            self.current_annotations[current_row]['detailed_caption'] = value
+        elif 'detailed_caption' in self.current_annotations[current_row]:
+            del self.current_annotations[current_row]['detailed_caption']
+        self.is_modified = True
+        self.update_bbox_list()
+        self.image_display.set_annotations(self.current_annotations)
+        self.bbox_list.setCurrentRow(current_row)
+        self.image_display.set_selected_bbox(current_row)
+        if value:
+            self.log_status(f"✅ Updated detailed_caption")
+        else:
+            self.log_status("✅ Removed detailed_caption")
         
     def add_bbox(self):
         """Add bounding box"""
@@ -1027,6 +1054,28 @@ class AnnotationToolWindow(QMainWindow):
             
     def save_annotations(self):
         """Save annotations"""
+        # Sync current UI edits into model before saving
+        current_row = self.bbox_list.currentRow()
+        if 0 <= current_row < len(self.current_annotations):
+            self.current_annotations[current_row]['class'] = self.class_input.text().strip()
+            cd = self.class_detailed_input.text().strip()
+            dc = self.detailed_caption_input.toPlainText().strip()
+            if cd:
+                self.current_annotations[current_row]['class_detailed'] = cd
+            elif 'class_detailed' in self.current_annotations[current_row]:
+                del self.current_annotations[current_row]['class_detailed']
+            if dc:
+                self.current_annotations[current_row]['detailed_caption'] = dc
+            elif 'detailed_caption' in self.current_annotations[current_row]:
+                del self.current_annotations[current_row]['detailed_caption']
+
+        # Strip any OpenVocab keys from annotations before saving
+        for ann in self.current_annotations:
+            if isinstance(ann, dict) and 'openvocab' in ann:
+                try:
+                    del ann['openvocab']
+                except Exception:
+                    pass
         _, json_path = self.matched_pairs[self.current_frame_index]
         try:
             with open(json_path, 'w') as f:
@@ -1043,6 +1092,11 @@ class AnnotationToolWindow(QMainWindow):
         self.status_text.append(f"[{QApplication.instance().applicationName()}] {message}")
         self.status_text.ensureCursorVisible()
         
+    def on_text_modified(self, *_args):
+        """Mark as modified when text edits occur (for unsaved-change prompts)."""
+        if self.updating_inputs:
+            return
+        self.is_modified = True
 
 
 def main():
