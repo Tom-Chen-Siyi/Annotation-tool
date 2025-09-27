@@ -1,0 +1,134 @@
+[
+  {
+    "box": [
+      0.47222900390625,
+      850.46142578125,
+      241.07107543945312,
+      1078.1004638671875
+    ],
+    "class": "car",
+    "score": 0.9290451407432556,
+    "detailed_caption": "A silver car is seen in this surveillance image.",
+    "class_detailed": "police car"
+  },
+  {
+    "box": [
+      948.5648803710938,
+      206.0399932861328,
+      1060.148193359375,
+      279.67791748046875
+    ],
+    "class": "bus",
+    "score": 0.8711600303649902,
+    "detailed_caption": "bus on the road with people walking by",
+    "class_detailed": "bus"
+  },
+  {
+    "box": [
+      883.1531982421875,
+      194.84815979003906,
+      955.7865600585938,
+      253.90589904785156
+    ],
+    "class": "bus",
+    "score": 0.8264020681381226,
+    "detailed_caption": "car",
+    "class_detailed": "bus"
+  },
+  {
+    "box": [
+      726.3038330078125,
+      734.8987426757812,
+      774.9986572265625,
+      810.4019165039062
+    ],
+    "class": "fire hydrant",
+    "score": 0.7837899923324585,
+    "detailed_caption": "fire hydrant in red dress",
+    "class_detailed": "fire hydrant"
+  },
+  {
+    "box": [
+      298.5196838378906,
+      186.02613830566406,
+      339.79193115234375,
+      278.92340087890625
+    ],
+    "class": "traffic light",
+    "score": 0.7363325953483582,
+    "detailed_caption": "refrigerator",
+    "class_detailed": "traffic light"
+  },
+  {
+    "box": [
+      396.23822021484375,
+      179.99020385742188,
+      430.2799072265625,
+      255.0553436279297
+    ],
+    "class": "traffic light",
+    "score": 0.706067681312561,
+    "detailed_caption": "refrigerator",
+    "class_detailed": "traffic light"
+  },
+  {
+    "box": [
+      353.044189453125,
+      184.28453063964844,
+      390.6864929199219,
+      277.44207763671875
+    ],
+    "class": "traffic light",
+    "score": 0.6819051504135132,
+    "detailed_caption": "suitcase",
+    "class_detailed": "traffic light"
+  },
+  {
+    "box": [
+      1246.9705810546875,
+      167.53939819335938,
+      1280.6669921875,
+      212.8974151611328
+    ],
+    "class": "traffic light",
+    "score": 0.5826641917228699,
+    "detailed_caption": "dog and cat in a room with green lights",
+    "class_detailed": "green traffic light"
+  },
+  {
+    "box": [
+      425.0365905761719,
+      375.0536804199219,
+      454.2583923339844,
+      407.08935546875
+    ],
+    "class": "traffic light",
+    "score": 0.4698682129383087,
+    "detailed_caption": "person",
+    "class_detailed": "traffic light"
+  },
+  {
+    "box": [
+      1897.4517822265625,
+      484.8324279785156,
+      1919.1812744140625,
+      525.507080078125
+    ],
+    "class": "car",
+    "score": 0.4048509895801544,
+    "detailed_caption": "person",
+    "class_detailed": "car"
+  },
+  {
+    "box": [
+      642.06982421875,
+      271.1504821777344,
+      661.140625,
+      312.93011474609375
+    ],
+    "class": "person",
+    "score": 0.2516530752182007,
+    "detailed_caption": "vase with green apple on top of it",
+    "class_detailed": "tree"
+  }
+]
