@@ -1,143 +1,112 @@
-# PyQt Image Annotation Tool
+## PyQt Image Annotation Tool
 
-A professional desktop application for viewing and editing image annotations with interactive bounding box manipulation.
+Desktop app for browsing image frames and editing bounding-box annotations stored in JSON.
 
-## Features
+### Features
 
-- **Interactive Bounding Box Editing**: Drag and drop bounding boxes and resize handles
-- **Zoom and Pan**: Mouse wheel zoom centered on click position, drag to pan image
-- **Real-time Coordinate Sync**: Changes are immediately reflected in the UI
-- **Multi-frame Support**: Navigate through multiple image frames
-- **JSON Export**: Export annotations to JSON format
-- **Professional UI**: Clean, responsive interface with English labels
+- **Interactive bbox editing**: click to select, drag to move, drag corner handles to resize.
+- **Zoom & pan**: mouse wheel to zoom (centered on last click), drag empty area to pan, double-click to reset zoom.
+- **Multi-frame navigation**: slider + buttons + direct frame index input.
+- **Fast bbox navigation**: A/D switch bboxes; automatically jumps across frames (skipping empty frames).
+- **Shortcut delete**: Delete/Backspace deletes the selected bbox.
+- **Auto-save**: any bbox change (class / class detailed / caption / coordinates / drag / add / delete) is automatically saved to JSON; switching frames never asks.
 
-## Installation & Setup
+### Project layout
 
-### Prerequisites
-
-- **Python 3.7+** installed on your system
-- **Operating System**: macOS 10.14+ or Windows 10+
-
-### Step 1: Install Python Dependencies
-
-#### For MacBook Users:
-
-```bash
-# Install required packages
-pip3 install PyQt5 Pillow numpy opencv-python
+Put images and JSON files in these folders (relative to the script):
 
 ```
-
-#### For Windows Users:
-
-```cmd
-# Install required packages
-pip install PyQt5 Pillow numpy opencv-python
-```
-
-### Step 2: Download and Setup
-
-1. **Download** the `pyqt_annotation_tool.py` file
-2. **Create** the following directory structure(If not existed):
-
-```
-annotation-tool/
+Modify-annotation/
 ├── pyqt_annotation_tool.py
-├── sample_frames/          # Put your image files here (.jpg, .png)
-└── sample_jsons/           # Put your JSON files here (.json)
+├── sample_frames/   # .jpg / .png
+└── sample_jsons/    # .json
 ```
 
-### Step 3: Prepare Your Data
+### File matching rule
 
-#### Image Files:
+The app pairs an image with a JSON file when the **image stem** is contained in the **JSON stem**.
 
-- Place your images in the `sample_frames/` folder
-- Supported formats: JPG, PNG, BMP, TIFF, GIF
+Examples:
 
-#### JSON Files:
+| Image file | JSON file | Status |
+| --- | --- | --- |
+| `frame_001.jpg` | `frame_001.json` | ✅ |
+| `frame_001.jpg` | `frame_001_yolo11x_classified.json` | ✅ |
+| `frame_001.jpg` | `frame_002.json` | ❌ |
 
-- Place your annotation files in the `sample_jsons/` folder
-- **Important**: JSON filename must contain the image filename
-- Example: `frame_001.jpg` ↔ `frame_001.json` or `frame_001_annotations.json`
+### Annotation JSON format
 
-#### JSON Format:
+Each JSON file is a list of objects like:
 
 ```json
 [
   {
-    "class": "person",
+    "class": "car",
+    "class_detailed": "police car",
+    "detailed_caption": "a car parked on the right side",
     "box": [x1, y1, x2, y2],
     "score": 0.95
   }
 ]
 ```
 
-### Step 4: Run the Application
+Only `class` and `box` are required. Extra keys are preserved (except legacy `openvocab`, which is removed on save).
 
-#### For MacBook Users:
+### Installation
+
+#### Requirements
+
+- Python 3.8+
+- PyQt5
+- Pillow
+
+Install:
+
+```bash
+pip install PyQt5 Pillow
+```
+
+### Run
 
 ```bash
 python3 pyqt_annotation_tool.py
 ```
 
-#### For Windows Users:
+### How to use
 
-```cmd
-python pyqt_annotation_tool.py
-```
-## File Naming Examples
-Image file name must included in the json file name
+#### Frame navigation
 
-| Image File      | JSON File                    | Status     |
-| --------------- | ---------------------------- | ---------- |
-| `frame_001.jpg` | `frame_001.json`             | ✅ Valid   |
-| `frame_001.jpg` | `frame_001_annotations.json` | ✅ Valid   |
-| `frame_001.jpg` | `frame_002.json`             | ❌ Invalid |
-| `image1.png`    | `image1_modelA.json`         | ✅ Valid   |
+- **Buttons**: `←` / `→` switch to previous/next frame.
+- **Slider**: drag the progress slider to move through frames.
+- **Index input**: type a 1-based frame index (the numerator) to jump directly.
 
-## Usage
+#### Bounding boxes
 
-### Basic Controls:
+- **Auto-select on launch**: opens on frame 1 and selects bbox 1 (if available).
+- **Select**: click a bbox on the image or click the row in `BBox List`.
+- **Move/resize**:
+  - drag bbox body to move
+  - drag corner handles to resize
+- **Edit fields** (right panel):
+  - `Class`, `Class Detailed`, `Detailed Caption`
+  - `Top Left X/Y`, `Bottom Right X/Y`
 
-- **Navigation**: Use arrow buttons or slider to switch frames
-- **Zoom**: Mouse wheel or trackpad pinch
-- **Pan**: Click and drag on empty image area
-- **Reset Zoom**: Double-click on image
+#### Keyboard shortcuts
 
-### Bounding Box Editing:
+- **A**: previous bbox  
+  - if currently at the first bbox of a frame, jumps to the **previous frame’s last bbox** (skips empty frames)
+- **D**: next bbox  
+  - if currently at the last bbox of a frame, jumps to the **next frame’s first bbox** (skips empty frames)
+- **Delete / Backspace**: delete selected bbox (no confirmation)
 
-- **Select**: Click on bounding box (turns blue when selected)
-- **Move**: Click and drag the box body
-- **Resize**: Drag yellow handles at corners
-- **Add**: Click "Add" button in right panel
-- **Delete**: Select box and click "Delete" button
+#### Saving behavior
 
-### Real-time Editing:
+- **Auto-save is on**: changes are written to the current frame’s JSON automatically (debounced).
+- **No “unsaved changes” prompts** when switching frames.
 
-- **Coordinates**: Edit X1, Y1, X2, Y2 values in the right panel
-- **Class**: Change annotation class name
-- **Save**: Click "Save" to save current frame
-- **Export**: Click "Export JSON" to export all frames
+### Troubleshooting
 
-## Troubleshooting
-
-### Common Issues:
-
-#### "No matching image/JSON file pairs found"
-
-- Ensure JSON filename contains the image filename
-- Check that both `sample_frames/` and `sample_jsons/` directories exist
-- Verify JSON format is correct
-
-#### "python command not found"
-
-- Install Python from [python.org](https://www.python.org/downloads/)
-- Ensure "Add Python to PATH" is checked during installation
-
-#### Poor performance with large images
-
-- Reduce image resolution
-- Close other applications
-- Use smaller batch sizes
-
-
+- **“No matching image/JSON file pairs found”**
+  - Ensure `sample_frames/` and `sample_jsons/` exist
+  - Ensure each JSON filename contains the matching image filename stem
+  - Ensure JSON files contain a valid list

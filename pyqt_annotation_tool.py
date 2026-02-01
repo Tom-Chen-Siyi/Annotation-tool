@@ -1,21 +1,19 @@
 import sys
-import os
 import json
 from pathlib import Path
-from PIL import Image, ImageDraw
-import numpy as np
+from typing import Optional
+from PIL import Image
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QSlider, QListWidget,
-                             QLineEdit, QSpinBox, QMessageBox, QFileDialog, QGroupBox,
-                             QGridLayout, QSplitter, QFrame, QTextEdit, QComboBox)
+                             QLineEdit, QSpinBox, QMessageBox, QGroupBox,
+                             QGridLayout, QSplitter, QFrame, QTextEdit, QShortcut)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QImage
-import cv2
+from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont
 
 # === Configuration Parameters ===
 image_dir = Path("sample_frames")
 json_dir = Path("sample_jsons")
-CACHE_WINDOW = 10
+DEBUG = False
 
 # === File Matching Functions ===
 def load_matched_pairs():
@@ -39,6 +37,7 @@ def load_matched_pairs():
 # === Image Display Widget ===
 class ImageDisplayWidget(QWidget):
     bbox_clicked = pyqtSignal(int)  # Send bounding box index
+    bbox_modified = pyqtSignal(int)  # Send modified bounding box index
     zoom_changed = pyqtSignal(float)  # Send zoom scale
     
     def __init__(self):
@@ -161,15 +160,17 @@ class ImageDisplayWidget(QWidget):
                             new_box[3] = int(float(old_box[3]) + image_dy)
                     except (ValueError, TypeError) as e:
                         # If coordinate conversion fails, keep original values
-                        print(f"Coordinate conversion error: {e}")
+                        if DEBUG:
+                            print(f"Coordinate conversion error: {e}")
                         new_box = list(old_box)
                 
                 # Ensure bounding box is valid and within image bounds
                 widget_size = self.size()
                 image_size = self.image.size()
                 
-                print(f"New bounding box: {new_box}")
-                print(f"Image size: {image_size.width()} x {image_size.height()}")
+                if DEBUG:
+                    print(f"New bounding box: {new_box}")
+                    print(f"Image size: {image_size.width()} x {image_size.height()}")
                 
                 # Check if bounding box is valid
                 is_valid_size = len(new_box) == 4
@@ -177,7 +178,8 @@ class ImageDisplayWidget(QWidget):
                 is_in_bounds = (new_box[0] >= 0 and new_box[1] >= 0 and 
                                new_box[2] <= image_size.width() and new_box[3] <= image_size.height())
                 
-                print(f"BBox validation: size_valid={is_valid_size}, coords_valid={is_valid_coords}, in_bounds={is_in_bounds}")
+                if DEBUG:
+                    print(f"BBox validation: size_valid={is_valid_size}, coords_valid={is_valid_coords}, in_bounds={is_in_bounds}")
                 
                 if is_valid_size and is_valid_coords and is_in_bounds:
                     try:
@@ -186,17 +188,21 @@ class ImageDisplayWidget(QWidget):
                         
                         # Send signal to notify main window to update input fields
                         self.bbox_clicked.emit(self.drag_bbox_index)
-                        print(f"✅ Bounding box updated successfully")
+                        # Notify main window that bbox data changed (for autosave / list refresh)
+                        self.bbox_modified.emit(self.drag_bbox_index)
+                        if DEBUG:
+                            print(f"✅ Bounding box updated successfully")
                     except Exception as e:
-                        print(f"❌ Bounding box update failed: {e}")
+                        if DEBUG:
+                            print(f"❌ Bounding box update failed: {e}")
                 else:
-                    print(f"❌ Invalid bounding box: size={len(new_box)}, coords={new_box}")
-                    if not is_valid_coords:
-                        print(f"   Coordinate issue: x1({new_box[0]}) >= x2({new_box[2]}) or y1({new_box[1]}) >= y2({new_box[3]})")
-                    if not is_in_bounds:
-                        print(f"   Range issue: out of image bounds")
-                
-                print(f"=== Drag debug end ===\n")
+                    if DEBUG:
+                        print(f"❌ Invalid bounding box: size={len(new_box)}, coords={new_box}")
+                        if not is_valid_coords:
+                            print(f"   Coordinate issue: x1({new_box[0]}) >= x2({new_box[2]}) or y1({new_box[1]}) >= y2({new_box[3]})")
+                        if not is_in_bounds:
+                            print(f"   Range issue: out of image bounds")
+                        print(f"=== Drag debug end ===\n")
                 
                 # Update start position
                 self.drag_start_pos = current_pos
@@ -382,24 +388,7 @@ class ImageDisplayWidget(QWidget):
             
             painter.drawRect(int(x1), int(y1), int(x2 - x1), int(y2 - y1))
             
-            # If it's the selected bounding box, draw resize handles
-            if i == self.selected_bbox:
-                handle_size = 16  # Increase handle size to match detection area
-                # Draw resize handles at four corners
-                painter.setPen(QPen(QColor(255, 255, 0), 2))
-                painter.setBrush(QColor(255, 255, 0))
-                
-                # Calculate handle positions
-                handle_positions = {
-                    "top_left": (int(x1 - handle_size//2), int(y1 - handle_size//2)),
-                    "top_right": (int(x2 - handle_size//2), int(y1 - handle_size//2)),
-                    "bottom_left": (int(x1 - handle_size//2), int(y2 - handle_size//2)),
-                    "bottom_right": (int(x2 - handle_size//2), int(y2 - handle_size//2))
-                }
-                
-                # Draw handles
-                for handle_name, (hx, hy) in handle_positions.items():
-                    painter.drawRect(hx, hy, handle_size, handle_size)
+            # No visible corner handles for selected bbox (resize still works by dragging corners)
             
             # Draw label
             font = QFont("Arial", 12)  # 将字体大小从10增加到14
@@ -540,17 +529,33 @@ class AnnotationToolWindow(QMainWindow):
         self.current_annotations = []
         self.is_modified = False  # Track if current frame has been modified
         self.updating_inputs = False  # Suppress textChanged side-effects during UI updates
+        self._updating_frame_controls = False  # Suppress frame control recursion
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.timeout.connect(self._autosave_now)
+        self._is_autosaving = False
+        self._bbox_count_cache = {}  # frame_index -> bbox count (best-effort cache)
+        # Persist last position across app restarts
+        self._session_state_path = Path(__file__).resolve().parent / ".annotation_tool_state.json"
+        self._session_state_timer = QTimer(self)
+        self._session_state_timer.setSingleShot(True)
+        self._session_state_timer.timeout.connect(self._save_session_state_now)
         
         if self.total_frames == 0:
             QMessageBox.critical(self, "Error", "No matching image/JSON file pairs found!")
             sys.exit(1)
         
         self.init_ui()
-        self.load_frame(0)
+        state = self._load_session_state()
+        if state is not None:
+            frame_index, bbox_index = state
+            self.load_frame(frame_index, select_bbox_index=bbox_index)
+        else:
+            self.load_frame(0)
         
     def init_ui(self):
         """Initialize user interface"""
-        self.setWindowTitle("🎯 PyQt Image Annotation Tool")
+        self.setWindowTitle("Image Annotation Tool")
         self.setGeometry(100, 100, 2000, 1400)  # Further increase window size
         
         # Create central widget
@@ -571,33 +576,98 @@ class AnnotationToolWindow(QMainWindow):
         # Image display component
         self.image_display = ImageDisplayWidget()
         self.image_display.bbox_clicked.connect(self.on_bbox_clicked)
+        self.image_display.bbox_modified.connect(self.on_bbox_modified)
         self.image_display.zoom_changed.connect(self.on_zoom_changed)
         left_layout.addWidget(self.image_display)
         
         # Add stretch space to let image display area occupy more space
         left_layout.addStretch()
         
-        # Simplified frame control (more compact, placed at bottom)
-        frame_control_layout = QHBoxLayout()
-        
-        self.prev_btn = QPushButton("⬅️")
-        self.next_btn = QPushButton("➡️")
+        # Frame control bar (compact + centered + styled)
+        frame_bar = QFrame()
+        frame_bar.setObjectName("frameBar")
+        frame_bar_layout = QHBoxLayout(frame_bar)
+        frame_bar_layout.setContentsMargins(14, 10, 14, 10)
+        frame_bar_layout.setSpacing(12)
+
+        self.prev_btn = QPushButton("←")
+        self.next_btn = QPushButton("→")
         self.frame_slider = QSlider(Qt.Horizontal)
         self.frame_slider.setMinimum(0)
         self.frame_slider.setMaximum(self.total_frames - 1)
-        self.frame_label = QLabel(f"Frame 1/{self.total_frames}")
-        
-        # Set minimum size for buttons and labels
-        self.prev_btn.setMaximumWidth(40)
-        self.next_btn.setMaximumWidth(40)
-        self.frame_label.setMaximumWidth(80)
-        
-        frame_control_layout.addWidget(self.prev_btn)
-        frame_control_layout.addWidget(self.frame_slider)
-        frame_control_layout.addWidget(self.next_btn)
-        frame_control_layout.addWidget(self.frame_label)
-        
-        left_layout.addLayout(frame_control_layout)
+        # Keep the progress bar visually compact (requested)
+        self.frame_slider.setFixedWidth(500)
+
+        # 1-based frame index input (numerator) + total (denominator)
+        self.frame_prefix_label = QLabel("Frame")
+        self.frame_index_input = QSpinBox()
+        self.frame_index_input.setMinimum(1)
+        self.frame_index_input.setMaximum(self.total_frames)
+        self.frame_index_input.setValue(1)
+        self.frame_index_input.setFixedWidth(110)
+        self.frame_total_label = QLabel(f"/ {self.total_frames}")
+
+        # Sizes
+        for btn in (self.prev_btn, self.next_btn):
+            btn.setFixedSize(34, 30)
+            btn.setFocusPolicy(Qt.NoFocus)
+        self.frame_prefix_label.setFixedWidth(55)
+
+        # Center the whole control group in the bar
+        frame_bar_layout.addStretch(1)
+        frame_bar_layout.addWidget(self.prev_btn)
+        frame_bar_layout.addWidget(self.frame_slider)
+        frame_bar_layout.addWidget(self.next_btn)
+        frame_bar_layout.addSpacing(18)
+        frame_bar_layout.addWidget(self.frame_prefix_label)
+        frame_bar_layout.addWidget(self.frame_index_input)
+        frame_bar_layout.addWidget(self.frame_total_label)
+        frame_bar_layout.addStretch(1)
+
+        # Styling (macOS-like, subtle)
+        frame_bar.setStyleSheet("""
+            QFrame#frameBar {
+                background: #F2F2F7;
+                border: 1px solid #D1D1D6;
+                border-radius: 12px;
+            }
+            QPushButton {
+                background: #FFFFFF;
+                border: 1px solid #D1D1D6;
+                border-radius: 8px;
+                color: #1C1C1E;
+                font-size: 16px;
+                padding: 0px 10px;
+            }
+            QPushButton:hover { background: #FFFFFF; border-color: #AFAFB5; }
+            QPushButton:pressed { background: #E9E9ED; }
+            QSpinBox {
+                background: #FFFFFF;
+                border: 1px solid #D1D1D6;
+                border-radius: 8px;
+                padding: 2px 8px;
+                min-height: 28px;
+            }
+            QLabel { color: #1C1C1E; }
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #D1D1D6;
+                border-radius: 3px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #0A84FF;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #FFFFFF;
+                border: 1px solid #D1D1D6;
+                width: 14px;
+                margin: -6px 0;
+                border-radius: 7px;
+            }
+        """)
+
+        left_layout.addWidget(frame_bar, alignment=Qt.AlignHCenter)
         
         # Zoom control (hidden display but functionality preserved)
         self.zoom_label = QLabel("Zoom: 100% (Mouse wheel to zoom, Drag to pan, Double-click to reset)")
@@ -651,22 +721,22 @@ class AnnotationToolWindow(QMainWindow):
         self.detailed_caption_input.setLineWrapMode(QTextEdit.WidgetWidth)
         edit_layout.addWidget(self.detailed_caption_input, 3, 1)
         
-        edit_layout.addWidget(QLabel("X1:"), 4, 0)
+        edit_layout.addWidget(QLabel("Top Left X:"), 4, 0)
         self.x1_input = QSpinBox()
         self.x1_input.setMaximum(9999)
         edit_layout.addWidget(self.x1_input, 4, 1)
         
-        edit_layout.addWidget(QLabel("Y1:"), 5, 0)
+        edit_layout.addWidget(QLabel("Top Left Y:"), 5, 0)
         self.y1_input = QSpinBox()
         self.y1_input.setMaximum(9999)
         edit_layout.addWidget(self.y1_input, 5, 1)
         
-        edit_layout.addWidget(QLabel("X2:"), 6, 0)
+        edit_layout.addWidget(QLabel("Bottom Right X:"), 6, 0)
         self.x2_input = QSpinBox()
         self.x2_input.setMaximum(9999)
         edit_layout.addWidget(self.x2_input, 6, 1)
         
-        edit_layout.addWidget(QLabel("Y2:"), 7, 0)
+        edit_layout.addWidget(QLabel("Bottom Right Y:"), 7, 0)
         self.y2_input = QSpinBox()
         self.y2_input.setMaximum(9999)
         edit_layout.addWidget(self.y2_input, 7, 1)
@@ -709,12 +779,31 @@ class AnnotationToolWindow(QMainWindow):
         
         # Connect signals
         self.connect_signals()
+
+        # Global shortcuts: A=prev bbox, D=next bbox (work immediately on launch)
+        self._shortcut_prev_bbox = QShortcut(Qt.Key_A, self)
+        self._shortcut_prev_bbox.setContext(Qt.ApplicationShortcut)
+        self._shortcut_prev_bbox.activated.connect(self.select_prev_bbox)
+
+        self._shortcut_next_bbox = QShortcut(Qt.Key_D, self)
+        self._shortcut_next_bbox.setContext(Qt.ApplicationShortcut)
+        self._shortcut_next_bbox.activated.connect(self.select_next_bbox)
+
+        # Delete bbox shortcut: Delete / Backspace
+        self._shortcut_delete_bbox = QShortcut(Qt.Key_Delete, self)
+        self._shortcut_delete_bbox.setContext(Qt.ApplicationShortcut)
+        self._shortcut_delete_bbox.activated.connect(self.delete_bbox_shortcut)
+
+        self._shortcut_backspace_delete_bbox = QShortcut(Qt.Key_Backspace, self)
+        self._shortcut_backspace_delete_bbox.setContext(Qt.ApplicationShortcut)
+        self._shortcut_backspace_delete_bbox.activated.connect(self.delete_bbox_shortcut)
         
     def connect_signals(self):
         """Connect signals and slots"""
         self.prev_btn.clicked.connect(self.previous_frame)
         self.next_btn.clicked.connect(self.next_frame)
         self.frame_slider.valueChanged.connect(self.on_frame_slider_changed)
+        self.frame_index_input.valueChanged.connect(self.on_frame_index_input_changed)
         
         # self.rename_btn.clicked.connect(self.rename_bbox)  # Removed rename button
         self.add_bbox_btn.clicked.connect(self.add_bbox)
@@ -729,27 +818,17 @@ class AnnotationToolWindow(QMainWindow):
         self.x2_input.valueChanged.connect(self.on_coord_changed)
         self.y2_input.valueChanged.connect(self.on_coord_changed)
         # Track text edits to prompt unsaved changes
+        self.class_input.textChanged.connect(self.on_text_modified)
         self.class_detailed_input.textChanged.connect(self.on_text_modified)
         self.detailed_caption_input.textChanged.connect(self.on_text_modified)
         
         # Zoom control signals already implemented through mouse wheel
         
-    def load_frame(self, frame_index):
+    def load_frame(self, frame_index: int, select_bbox_index: Optional[int] = None):
         """Load specified frame"""
         if 0 <= frame_index < self.total_frames:
-            # Check if current frame has unsaved changes
-            if self.is_modified:
-                reply = QMessageBox.question(
-                    self, 
-                    "Unsaved Changes", 
-                    f"Frame {self.current_frame_index + 1} has unsaved changes. Do you want to save before switching?",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
-                )
-                
-                if reply == QMessageBox.Yes:
-                    self.save_annotations()
-                elif reply == QMessageBox.Cancel:
-                    return  # Cancel the frame switch
+            # Auto-save before switching frames (no prompt)
+            self.flush_autosave()
             
             self.current_frame_index = frame_index
             
@@ -764,23 +843,45 @@ class AnnotationToolWindow(QMainWindow):
             except Exception as e:
                 self.current_annotations = []
                 self.log_status(f"⚠️ Error loading annotations: {e}")
+            # Update bbox count cache
+            try:
+                self._bbox_count_cache[frame_index] = len(self.current_annotations) if isinstance(self.current_annotations, list) else 0
+            except Exception:
+                self._bbox_count_cache[frame_index] = 0
             
             # Reset modified flag for new frame
             self.is_modified = False
             
             # Update interface
             self.update_ui()
-            
-            # Clear edit inputs when switching frames
-            self.clear_inputs()
+
+            # Select bbox on load:
+            # - default: first bbox (0) if exists
+            # - caller can override with select_bbox_index (supports negative for "from end")
+            if len(self.current_annotations) > 0:
+                idx = 0 if select_bbox_index is None else select_bbox_index
+                if idx < 0:
+                    idx = len(self.current_annotations) - 1
+                if idx >= len(self.current_annotations):
+                    idx = len(self.current_annotations) - 1
+                self.bbox_list.setCurrentRow(idx)
+                self.image_display.set_selected_bbox(idx)
+                self.update_inputs()
+            else:
+                self.clear_inputs()
             
             self.log_status(f"✅ Loaded frame {frame_index + 1}: {img_path.name}")
+            self.schedule_session_state_save()
             
     def update_ui(self):
         """Update user interface"""
-        # Update frame information
-        self.frame_label.setText(f"Frame {self.current_frame_index + 1}/{self.total_frames}")
-        self.frame_slider.setValue(self.current_frame_index)
+        # Update frame information (avoid recursion)
+        self._updating_frame_controls = True
+        try:
+            self.frame_slider.setValue(self.current_frame_index)
+            self.frame_index_input.setValue(self.current_frame_index + 1)
+        finally:
+            self._updating_frame_controls = False
         
         
         # Update bounding box list
@@ -788,9 +889,7 @@ class AnnotationToolWindow(QMainWindow):
         
         # Update image display
         self.image_display.set_annotations(self.current_annotations)
-        
-        # Ensure no bounding box is selected (initial state)
-        self.image_display.set_selected_bbox(-1)
+        # Selection is controlled by caller (e.g., auto-select first bbox on load)
         
     def update_bbox_list(self):
         """Update bounding box list"""
@@ -806,11 +905,39 @@ class AnnotationToolWindow(QMainWindow):
                 parts.append(f"cap={short_cap}")
             parts.append(str(ann.get('box', '')))
             self.bbox_list.addItem(" ".join(parts))
+
+    def _refresh_bbox_list_preserve_selection(self, prefer_row: Optional[int] = None):
+        """Refresh bbox list text while keeping selection and not triggering input resets."""
+        row = self.bbox_list.currentRow() if prefer_row is None else int(prefer_row)
+        if len(self.current_annotations) == 0:
+            row = -1
+        elif row >= len(self.current_annotations):
+            row = len(self.current_annotations) - 1
+
+        self.bbox_list.blockSignals(True)
+        self.bbox_list.setUpdatesEnabled(False)
+        try:
+            self.update_bbox_list()
+            if row >= 0:
+                self.bbox_list.setCurrentRow(row)
+        finally:
+            self.bbox_list.setUpdatesEnabled(True)
+            self.bbox_list.blockSignals(False)
             
     def on_frame_slider_changed(self, value):
         """Frame slider change event"""
+        if self._updating_frame_controls:
+            return
         if value != self.current_frame_index:
             self.load_frame(value)
+
+    def on_frame_index_input_changed(self, value: int):
+        """Frame index input changed (1-based): jump to that frame."""
+        if self._updating_frame_controls:
+            return
+        target = int(value) - 1
+        if 0 <= target < self.total_frames and target != self.current_frame_index:
+            self.load_frame(target)
             
     def previous_frame(self):
         """Previous frame"""
@@ -827,6 +954,16 @@ class AnnotationToolWindow(QMainWindow):
         self.bbox_list.setCurrentRow(bbox_index)
         self.image_display.set_selected_bbox(bbox_index)
         self.update_inputs()
+        self.schedule_session_state_save()
+
+    def on_bbox_modified(self, bbox_index):
+        """Bounding box data changed from drag/resize on canvas."""
+        if not (0 <= bbox_index < len(self.current_annotations)):
+            return
+        self.is_modified = True
+        # Refresh list text to reflect updated coords
+        self._refresh_bbox_list_preserve_selection()
+        self.schedule_autosave()
         
     def on_zoom_changed(self, scale_factor):
         """Zoom change event"""
@@ -856,10 +993,8 @@ class AnnotationToolWindow(QMainWindow):
         self.image_display.set_annotations(self.current_annotations)
         
         # Update list display
-        self.update_bbox_list()
-        
-        # Maintain current selection
-        self.bbox_list.setCurrentRow(current_row)
+        self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
+        self.schedule_autosave()
         
 
         
@@ -868,6 +1003,7 @@ class AnnotationToolWindow(QMainWindow):
         if 0 <= row < len(self.current_annotations):
             self.image_display.set_selected_bbox(row)
             self.update_inputs()
+            self.schedule_session_state_save()
             
     def update_inputs(self):
         """Update input boxes"""
@@ -913,34 +1049,6 @@ class AnnotationToolWindow(QMainWindow):
         self.updating_inputs = False
         
 
-    def rename_bbox(self):
-        """Rename bounding box"""
-        current_row = self.bbox_list.currentRow()
-        if current_row < 0:
-            QMessageBox.warning(self, "Warning", "Please select a bounding box first")
-            return
-            
-        new_class = self.class_input.text().strip()
-        
-        if not new_class:
-            QMessageBox.warning(self, "Warning", "Please enter a class name")
-            return
-            
-        self.current_annotations[current_row]['class'] = new_class
-        
-        self.is_modified = True  # Mark as modified
-        
-        # Only update image display and list, don't clear input boxes
-        self.image_display.set_annotations(self.current_annotations)
-        self.update_bbox_list()
-        
-        # Maintain selection
-        self.bbox_list.setCurrentRow(current_row)
-        self.image_display.set_selected_bbox(current_row)
-        
-        self.log_status(f"✅ Updated bounding box {current_row}: class={new_class}")
-        
-        
     def on_class_enter_pressed(self):
         """Handle Enter key press in class input"""
         current_row = self.bbox_list.currentRow()
@@ -958,13 +1066,11 @@ class AnnotationToolWindow(QMainWindow):
         
         # Update image display and list
         self.image_display.set_annotations(self.current_annotations)
-        self.update_bbox_list()
-        
-        # Maintain selection
-        self.bbox_list.setCurrentRow(current_row)
+        self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
         self.image_display.set_selected_bbox(current_row)
         
         self.log_status(f"✅ Updated class to: {new_class}")
+        self.schedule_autosave()
         
     # OpenVocab handler removed
 
@@ -980,36 +1086,15 @@ class AnnotationToolWindow(QMainWindow):
         elif 'class_detailed' in self.current_annotations[current_row]:
             del self.current_annotations[current_row]['class_detailed']
         self.is_modified = True
-        self.update_bbox_list()
+        self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
         self.image_display.set_annotations(self.current_annotations)
-        self.bbox_list.setCurrentRow(current_row)
         self.image_display.set_selected_bbox(current_row)
         if value:
             self.log_status(f"✅ Updated class_detailed to: {value}")
         else:
             self.log_status("✅ Removed class_detailed")
+        self.schedule_autosave()
 
-    def on_detailed_caption_enter_pressed(self):
-        """Handle Enter key press in detailed_caption input"""
-        current_row = self.bbox_list.currentRow()
-        if current_row < 0:
-            QMessageBox.warning(self, "Warning", "Please select a bounding box first")
-            return
-        value = self.detailed_caption_input.text().strip()
-        if value:
-            self.current_annotations[current_row]['detailed_caption'] = value
-        elif 'detailed_caption' in self.current_annotations[current_row]:
-            del self.current_annotations[current_row]['detailed_caption']
-        self.is_modified = True
-        self.update_bbox_list()
-        self.image_display.set_annotations(self.current_annotations)
-        self.bbox_list.setCurrentRow(current_row)
-        self.image_display.set_selected_bbox(current_row)
-        if value:
-            self.log_status(f"✅ Updated detailed_caption")
-        else:
-            self.log_status("✅ Removed detailed_caption")
-        
     def add_bbox(self):
         """Add bounding box"""
         # Get image dimensions
@@ -1030,8 +1115,11 @@ class AnnotationToolWindow(QMainWindow):
         
         self.current_annotations.append(new_bbox)
         self.is_modified = True  # Mark as modified
+        # Update cache immediately (count changed)
+        self._bbox_count_cache[self.current_frame_index] = len(self.current_annotations)
         self.update_ui()
         self.log_status("✅ Added new bounding box")
+        self.schedule_autosave()
         
     def delete_bbox(self):
         """Delete bounding box"""
@@ -1039,18 +1127,17 @@ class AnnotationToolWindow(QMainWindow):
         if current_row < 0:
             QMessageBox.warning(self, "Warning", "Please select a bounding box first")
             return
-            
-        reply = QMessageBox.question(self, "Confirm Delete", 
-                                   "Are you sure you want to delete this bounding box?",
-                                   QMessageBox.Yes | QMessageBox.No)
         
-        if reply == QMessageBox.Yes:
-            deleted_class = self.current_annotations[current_row]['class']
-            del self.current_annotations[current_row]
-            self.is_modified = True  # Mark as modified
-            self.update_ui()
-            self.clear_inputs()
-            self.log_status(f"✅ Deleted bounding box {current_row}: {deleted_class}")
+        deleted_class = self.current_annotations[current_row].get('class', '')
+        del self.current_annotations[current_row]
+        self.is_modified = True  # Mark as modified
+        # Update cache immediately (count changed)
+        self._bbox_count_cache[self.current_frame_index] = len(self.current_annotations)
+        self.update_ui()
+        self.clear_inputs()
+        self.log_status(f"✅ Deleted bounding box {current_row}: {deleted_class}")
+        # Auto-save deletion immediately (no prompt)
+        self.flush_autosave()
             
     def save_annotations(self):
         """Save annotations"""
@@ -1078,12 +1165,19 @@ class AnnotationToolWindow(QMainWindow):
                     pass
         _, json_path = self.matched_pairs[self.current_frame_index]
         try:
+            self._is_autosaving = True
             with open(json_path, 'w') as f:
                 json.dump(self.current_annotations, f, indent=2)
             self.is_modified = False  # Reset modified flag after successful save
+            # Keep cache in sync
+            self._bbox_count_cache[self.current_frame_index] = len(self.current_annotations) if isinstance(self.current_annotations, list) else 0
+            # Refresh list text without triggering selection -> input resets (prevents cursor jump)
+            self._refresh_bbox_list_preserve_selection()
             self.log_status(f"✅ Saved to: {json_path.name}")
         except Exception as e:
             self.log_status(f"❌ Save failed: {e}")
+        finally:
+            self._is_autosaving = False
             
 
                 
@@ -1094,23 +1188,158 @@ class AnnotationToolWindow(QMainWindow):
         
     def on_text_modified(self, *_args):
         """Mark as modified when text edits occur (for unsaved-change prompts)."""
-        if self.updating_inputs:
+        if self.updating_inputs or self._is_autosaving:
             return
         self.is_modified = True
+        self.schedule_autosave()
+
+    def schedule_autosave(self, delay_ms: int = 250):
+        """Debounced autosave for any annotation change."""
+        if not self.is_modified:
+            return
+        # Restart debounce timer
+        self._autosave_timer.start(max(0, int(delay_ms)))
+
+    def flush_autosave(self):
+        """Force save immediately if there are pending changes."""
+        if self._autosave_timer.isActive():
+            self._autosave_timer.stop()
+        if self.is_modified:
+            self._autosave_now()
+
+    def schedule_session_state_save(self, delay_ms: int = 300):
+        """Debounced save of last frame/bbox position for next launch."""
+        self._session_state_timer.start(max(0, int(delay_ms)))
+
+    def flush_session_state_save(self):
+        """Force save session state immediately."""
+        if self._session_state_timer.isActive():
+            self._session_state_timer.stop()
+        self._save_session_state_now()
+
+    def _save_session_state_now(self):
+        """Internal: write last frame/bbox position to disk."""
+        try:
+            bbox_row = self.bbox_list.currentRow()
+            bbox_index = int(bbox_row) if bbox_row >= 0 else None
+            payload = {
+                "frame_index": int(self.current_frame_index),
+                "bbox_index": bbox_index,
+            }
+            with open(self._session_state_path, "w") as f:
+                json.dump(payload, f, indent=2)
+        except Exception:
+            # Best-effort persistence; never block the UI on failures
+            pass
+
+    def _load_session_state(self) -> Optional[tuple]:
+        """Return (frame_index, bbox_index) if saved, else None."""
+        try:
+            if not self._session_state_path.exists():
+                return None
+            with open(self._session_state_path, "r") as f:
+                data = json.load(f)
+            frame_index = int(data.get("frame_index", 0))
+            bbox_index = data.get("bbox_index", None)
+            bbox_index = None if bbox_index is None else int(bbox_index)
+            if frame_index < 0 or frame_index >= self.total_frames:
+                return None
+            return (frame_index, bbox_index)
+        except Exception:
+            return None
+
+    def closeEvent(self, event):
+        """Persist edits and last position on app close."""
+        try:
+            self.flush_autosave()
+            self.flush_session_state_save()
+        finally:
+            event.accept()
+
+    def _autosave_now(self):
+        """Internal: perform autosave without user interaction."""
+        if not self.is_modified:
+            return
+        self.save_annotations()
+
+    def delete_bbox_shortcut(self):
+        """Delete currently selected bbox via shortcut."""
+        # Avoid hijacking Backspace/Delete while user edits text
+        fw = QApplication.focusWidget()
+        if isinstance(fw, (QLineEdit, QTextEdit)):
+            return
+        self.delete_bbox()
+
+    def _get_frame_bbox_count(self, frame_index: int) -> int:
+        """Best-effort: return bbox count for a frame without switching UI."""
+        if frame_index in self._bbox_count_cache:
+            return int(self._bbox_count_cache.get(frame_index, 0) or 0)
+        try:
+            _, json_path = self.matched_pairs[frame_index]
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+            count = len(data) if isinstance(data, list) else 0
+            self._bbox_count_cache[frame_index] = count
+            return count
+        except Exception:
+            self._bbox_count_cache[frame_index] = 0
+            return 0
+
+    def _find_next_frame_with_bbox(self, start_index: int) -> Optional[int]:
+        """Return the next frame index > start_index that has at least 1 bbox."""
+        for i in range(start_index + 1, self.total_frames):
+            if self._get_frame_bbox_count(i) > 0:
+                return i
+        return None
+
+    def _find_prev_frame_with_bbox(self, start_index: int) -> Optional[int]:
+        """Return the previous frame index < start_index that has at least 1 bbox."""
+        for i in range(start_index - 1, -1, -1):
+            if self._get_frame_bbox_count(i) > 0:
+                return i
+        return None
+
+    def select_prev_bbox(self):
+        """Select previous bounding box (A)."""
+        n = len(self.current_annotations)
+        cur = self.bbox_list.currentRow()
+        if n > 0 and cur > 0:
+            self.bbox_list.setCurrentRow(cur - 1)
+            return
+
+        # At first bbox (or no selection) -> jump to previous frame's last bbox
+        prev_frame = self._find_prev_frame_with_bbox(self.current_frame_index)
+        if prev_frame is None:
+            # No previous frame with bbox; if current has bboxes, ensure selection
+            if n > 0:
+                self.bbox_list.setCurrentRow(0)
+            return
+        self.load_frame(prev_frame, select_bbox_index=-1)
+
+    def select_next_bbox(self):
+        """Select next bounding box (D)."""
+        n = len(self.current_annotations)
+        cur = self.bbox_list.currentRow()
+        if n > 0 and 0 <= cur < n - 1:
+            self.bbox_list.setCurrentRow(cur + 1)
+            return
+
+        # At last bbox (or no selection / empty) -> jump to next frame's first bbox
+        next_frame = self._find_next_frame_with_bbox(self.current_frame_index)
+        if next_frame is None:
+            # No next frame with bbox; if current has bboxes, ensure selection on last
+            if n > 0:
+                self.bbox_list.setCurrentRow(max(0, n - 1))
+            return
+        self.load_frame(next_frame, select_bbox_index=0)
+
+    # NOTE: A/D shortcuts are implemented via QShortcut with ApplicationShortcut
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("PyQt Annotation Tool")
-    
-    # Check dependencies
-    try:
-        import cv2
-    except ImportError:
-        QMessageBox.warning(None, "Missing Dependency", 
-                          "Please install OpenCV: pip install opencv-python")
-        return
-    
+
     window = AnnotationToolWindow()
     window.show()
     
