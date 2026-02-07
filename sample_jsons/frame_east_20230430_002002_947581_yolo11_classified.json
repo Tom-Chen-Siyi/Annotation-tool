@@ -1,0 +1,61 @@
+[
+  {
+    "box": [
+      241,
+      505,
+      413,
+      624
+    ],
+    "class": "car",
+    "score": 0.559285,
+    "detailed_caption": "a car is seen in a  video released by the fbi.",
+    "class_detailed": "police car"
+  },
+  {
+    "box": [
+      1372.3594,
+      237.7181,
+      1430.9576,
+      375.8535
+    ],
+    "class": "traffic light",
+    "score": 0.526706,
+    "class_detailed": "yellow traffic light"
+  },
+  {
+    "box": [
+      713,
+      454,
+      796,
+      536
+    ],
+    "class": "car",
+    "score": 0.448392,
+    "detailed_caption": "aa car is seen in t",
+    "class_detailed": "car"
+  },
+  {
+    "class": "pedestrian",
+    "box": [
+      682,
+      549,
+      721,
+      625
+    ],
+    "score": 1.0,
+    "class_detailed": "pedestrian",
+    "detailed_caption": "A pedestrian is crossing the road."
+  },
+  {
+    "class": "car",
+    "box": [
+      349,
+      469,
+      470,
+      563
+    ],
+    "score": 1.0,
+    "class_detailed": "car",
+    "detailed_caption": "A car is stopping on the road"
+  }
+]

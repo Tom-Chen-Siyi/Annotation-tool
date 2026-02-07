@@ -25,8 +25,7 @@ def load_matched_pairs():
         img_key = img_path.stem
         best_match = None
         for js_path in jsons:
-            js_key = js_path.stem
-            if img_key in js_key:
+            if img_key in js_path.stem:
                 best_match = js_path
                 break
         if best_match:
@@ -38,7 +37,6 @@ def load_matched_pairs():
 class ImageDisplayWidget(QWidget):
     bbox_clicked = pyqtSignal(int)  # Send bounding box index
     bbox_modified = pyqtSignal(int)  # Send modified bounding box index
-    zoom_changed = pyqtSignal(float)  # Send zoom scale
     
     def __init__(self):
         super().__init__()
@@ -46,7 +44,6 @@ class ImageDisplayWidget(QWidget):
         self.annotations = []
         self.selected_bbox = -1
         self.scale_factor = 1.0
-        self.original_size = None
         self.dragging = False
         self.drag_start_pos = None
         self.drag_bbox_index = -1
@@ -57,14 +54,12 @@ class ImageDisplayWidget(QWidget):
         self.panning = False  # Whether currently panning image
         self.pan_start_pos = None  # Pan start position
         self.last_click_pos = None  # Record last click position
-        self.handle_click_stats = {"total": 0, "detected": 0}  # Handle click statistics
         self.setMouseTracking(True)
         self.setMinimumSize(1200, 800)  # Further increase minimum size
         
     def set_image(self, image_path):
         """Set image"""
         self.image = QPixmap(str(image_path))
-        self.original_size = self.image.size()
         self.update()
         
     def set_annotations(self, annotations):
@@ -273,7 +268,6 @@ class ImageDisplayWidget(QWidget):
             self.zoom_offset_x = 0
             self.zoom_offset_y = 0
             self.update()
-            self.zoom_changed.emit(1.0)
             
     def wheelEvent(self, event):
         """Mouse wheel event - zoom functionality"""
@@ -327,9 +321,6 @@ class ImageDisplayWidget(QWidget):
             
             # Update display
             self.update()
-            
-            # Send zoom signal
-            self.zoom_changed.emit(new_scale)
         
     def paintEvent(self, event):
         """Paint event"""
@@ -425,9 +416,6 @@ class ImageDisplayWidget(QWidget):
                     # Check if clicked on resize handle
                     handle_size = 16  # Further increase handle detection area to improve detection success rate
                     
-                    # Count clicks
-                    self.handle_click_stats["total"] += 1
-                    
                     # Calculate handle position in window coordinates (consistent with drawing code)
                     widget_size = self.size()
                     image_size = self.image.size()
@@ -480,22 +468,18 @@ class ImageDisplayWidget(QWidget):
                         # Clicked bottom-right resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "bottom_right"
-                        self.handle_click_stats["detected"] += 1
                     elif is_in_handle_rect(mouse_x, mouse_y, handle_centers["top_left"][0], handle_centers["top_left"][1]):
                         # Clicked top-left resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "top_left"
-                        self.handle_click_stats["detected"] += 1
                     elif is_in_handle_rect(mouse_x, mouse_y, handle_centers["top_right"][0], handle_centers["top_right"][1]):
                         # Clicked top-right resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "top_right"
-                        self.handle_click_stats["detected"] += 1
                     elif is_in_handle_rect(mouse_x, mouse_y, handle_centers["bottom_left"][0], handle_centers["bottom_left"][1]):
                         # Clicked bottom-left resize handle
                         self.drag_mode = "resize"
                         self.resize_handle = "bottom_left"
-                        self.handle_click_stats["detected"] += 1
                     else:
                         # Clicked inside bounding box, perform move
                         self.drag_mode = "move"
@@ -577,7 +561,6 @@ class AnnotationToolWindow(QMainWindow):
         self.image_display = ImageDisplayWidget()
         self.image_display.bbox_clicked.connect(self.on_bbox_clicked)
         self.image_display.bbox_modified.connect(self.on_bbox_modified)
-        self.image_display.zoom_changed.connect(self.on_zoom_changed)
         left_layout.addWidget(self.image_display)
         
         # Add stretch space to let image display area occupy more space
@@ -668,10 +651,6 @@ class AnnotationToolWindow(QMainWindow):
         """)
 
         left_layout.addWidget(frame_bar, alignment=Qt.AlignHCenter)
-        
-        # Zoom control (hidden display but functionality preserved)
-        self.zoom_label = QLabel("Zoom: 100% (Mouse wheel to zoom, Drag to pan, Double-click to reset)")
-        # Not added to layout, but keep reference to support zoom functionality
         
         # File information (removed to save space)
         # self.file_info_label = QLabel("File Information")
@@ -964,10 +943,6 @@ class AnnotationToolWindow(QMainWindow):
         # Refresh list text to reflect updated coords
         self._refresh_bbox_list_preserve_selection()
         self.schedule_autosave()
-        
-    def on_zoom_changed(self, scale_factor):
-        """Zoom change event"""
-        self.zoom_label.setText(f"Zoom: {int(scale_factor * 100)}%")
         
     def on_coord_changed(self):
         """Coordinate input box change event - real-time update bounding box"""

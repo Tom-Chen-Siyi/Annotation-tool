@@ -1,0 +1,37 @@
+[
+  {
+    "box": [
+      1372,
+      237,
+      1430,
+      375
+    ],
+    "class": "traffic light",
+    "score": 0.527109,
+    "detailed_caption": "a yellow bag hanging from a hook on a wall",
+    "class_detailed": "yellow traffic light"
+  },
+  {
+    "box": [
+      206,
+      478,
+      374,
+      641
+    ],
+    "class": "car",
+    "score": 0.28587,
+    "detailed_caption": "a car is seen in this  image .",
+    "class_detailed": "car"
+  },
+  {
+    "class": "car",
+    "box": [
+      710,
+      406,
+      810,
+      568
+    ],
+    "score": 1.0,
+    "class_detailed": "car"
+  }
+]

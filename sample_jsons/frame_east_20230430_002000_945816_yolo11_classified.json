@@ -1,0 +1,36 @@
+[
+  {
+    "box": [
+      1371,
+      236,
+      1431,
+      375
+    ],
+    "class": "traffic light",
+    "score": 0.517222,
+    "detailed_caption": "a close up of a ligdht switch on a wall",
+    "class_detailed": "traffic light"
+  },
+  {
+    "box": [
+      248,
+      494,
+      410,
+      618
+    ],
+    "class": "car",
+    "score": 0.392485,
+    "detailed_caption": "a car that is sitting in a parking lot.",
+    "class_detailed": "small car"
+  },
+  {
+    "class": "new_object",
+    "box": [
+      371,
+      453,
+      471,
+      553
+    ],
+    "score": 1.0
+  }
+]

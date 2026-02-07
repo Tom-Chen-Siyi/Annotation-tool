@@ -1,0 +1,36 @@
+[
+  {
+    "box": [
+      1371,
+      236,
+      1430,
+      375
+    ],
+    "class": "traffic light",
+    "score": 0.492073,
+    "class_detailed": "Traffic light"
+  },
+  {
+    "box": [
+      716,
+      465,
+      800,
+      551
+    ],
+    "class": "car",
+    "score": 0.298213,
+    "detailed_caption": "a car that with light off",
+    "class_detailed": "car"
+  },
+  {
+    "box": [
+      614.326,
+      383.5028,
+      668.8776,
+      418.103
+    ],
+    "class": "car",
+    "score": 0.258455,
+    "class_detailed": "car"
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "box": [
+      1371.7416,
+      236.8554,
+      1431.1927,
+      375.2585
+    ],
+    "class": "traffic light",
+    "score": 0.512392,
+    "detailed_caption": "a close up of a light switch on a wall",
+    "class_detailed": "traffic light"
+  },
+  {
+    "box": [
+      254,
+      492,
+      415,
+      614
+    ],
+    "class": "car",
+    "score": 0.478348,
+    "detailed_caption": "da car is seen in this  image from a video released by the fbi.",
+    "class_detailed": "police car"
+  },
+  {
+    "class": "car",
+    "box": [
+      357,
+      472,
+      463,
+      552
+    ],
+    "score": 1.0,
+    "class_detailed": "car",
+    "detailed_caption": "A car is waiing and stop on the road"
+  }
+]
