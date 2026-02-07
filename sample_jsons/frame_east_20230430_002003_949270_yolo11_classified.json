@@ -6,10 +6,10 @@
       1430,
       375
     ],
-    "class": "traffic light",
+    "class": "Traffic Light",
     "score": 0.527109,
     "detailed_caption": "a yellow bag hanging from a hook on a wall",
-    "class_detailed": "yellow traffic light"
+    "class_detailed": "Yellow Traffic Lighs"
   },
   {
     "box": [
@@ -24,7 +24,7 @@
     "class_detailed": "car"
   },
   {
-    "class": "car",
+    "class": "Car",
     "box": [
       710,
       406,
@@ -32,6 +32,6 @@
       568
     ],
     "score": 1.0,
-    "class_detailed": "car"
+    "class_detailed": "Car"
   }
 ]

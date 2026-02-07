@@ -205,6 +205,9 @@ class AnnotationToolWindow(QMainWindow):
         self.class_input.setEditable(True)
         self.class_input.setInsertPolicy(QComboBox.NoInsert)
         self.class_input.addItems(CLASS_OPTIONS)
+        # For strong validation (no out-of-list values).
+        self._class_options_lookup = {s.strip().casefold(): s for s in CLASS_OPTIONS if isinstance(s, str) and s.strip()}
+        self._last_valid_class_text = self._class_other_text()
         from PyQt5.QtWidgets import QCompleter  # local import
         self._class_completer = QCompleter(CLASS_OPTIONS, self.class_input)
         self._class_completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -213,6 +216,7 @@ class AnnotationToolWindow(QMainWindow):
         self.class_input.setCompleter(self._class_completer)
         if self.class_input.lineEdit() is not None:
             self.class_input.lineEdit().textEdited.connect(self._on_class_text_edited)
+            self.class_input.lineEdit().editingFinished.connect(self._on_class_editing_finished)
         edit_layout.addWidget(self.class_input, 0, 1)
 
         edit_layout.addWidget(QLabel("Class Detailed:"), 2, 0)
@@ -220,6 +224,11 @@ class AnnotationToolWindow(QMainWindow):
         self.class_detailed_input.setEditable(True)
         self.class_detailed_input.setInsertPolicy(QComboBox.NoInsert)
         self.class_detailed_input.addItems(DETAILED_CLASS_OPTIONS)
+        # For strong validation (no out-of-list values).
+        self._detailed_class_options_lookup = {
+            s.strip().casefold(): s for s in DETAILED_CLASS_OPTIONS if isinstance(s, str) and s.strip()
+        }
+        self._last_valid_class_detailed_text = ""
         from PyQt5.QtWidgets import QCompleter  # local import
         self._detailed_class_completer = QCompleter(DETAILED_CLASS_OPTIONS, self.class_detailed_input)
         self._detailed_class_completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -228,12 +237,15 @@ class AnnotationToolWindow(QMainWindow):
         self.class_detailed_input.setCompleter(self._detailed_class_completer)
         if self.class_detailed_input.lineEdit() is not None:
             self.class_detailed_input.lineEdit().textEdited.connect(self._on_detailed_class_text_edited)
+            self.class_detailed_input.lineEdit().editingFinished.connect(self._on_detailed_class_editing_finished)
         edit_layout.addWidget(self.class_detailed_input, 2, 1)
 
         edit_layout.addWidget(QLabel("Detailed Caption:"), 3, 0)
         self.detailed_caption_input = QTextEdit()
         self.detailed_caption_input.setMinimumHeight(120)
         self.detailed_caption_input.setLineWrapMode(QTextEdit.WidgetWidth)
+        # Disabled (requested): keep display but prevent editing/focus.
+        self.detailed_caption_input.setDisabled(True)
         edit_layout.addWidget(self.detailed_caption_input, 3, 1)
 
         edit_layout.addWidget(QLabel("Top Left X:"), 4, 0)
@@ -451,12 +463,18 @@ class AnnotationToolWindow(QMainWindow):
             self.updating_inputs = True
 
             cls = bbox.get("class", "")
+            coerced = self._coerce_class_text(cls)
+            self._last_valid_class_text = coerced
             self.class_input.blockSignals(True)
-            self.class_input.setEditText(cls)
+            self.class_input.setEditText(coerced)
             self.class_input.blockSignals(False)
 
             self.class_detailed_input.blockSignals(True)
-            self.class_detailed_input.setEditText(bbox.get("class_detailed", ""))
+            raw_cd = bbox.get("class_detailed", "")
+            coerced_cd = self._coerce_detailed_class_text(raw_cd, fallback_to_last=True)
+            # Keep last valid for "revert" behavior.
+            self._last_valid_class_detailed_text = coerced_cd or ""
+            self.class_detailed_input.setEditText(coerced_cd)
             self.class_detailed_input.blockSignals(False)
 
             self.detailed_caption_input.setPlainText(bbox.get("detailed_caption", ""))
@@ -484,10 +502,12 @@ class AnnotationToolWindow(QMainWindow):
         self.class_input.blockSignals(True)
         self.class_input.setEditText("")
         self.class_input.blockSignals(False)
+        self._last_valid_class_text = self._class_other_text()
 
         self.class_detailed_input.blockSignals(True)
         self.class_detailed_input.setEditText("")
         self.class_detailed_input.blockSignals(False)
+        self._last_valid_class_detailed_text = ""
 
         self.detailed_caption_input.clear()
         self.x1_input.setValue(0)
@@ -527,9 +547,17 @@ class AnnotationToolWindow(QMainWindow):
         if current_row < 0 or current_row >= len(self.current_annotations):
             return
         new_class = self.class_input.currentText().strip()
-        if not new_class:
+        # While typing, editable combobox can contain partial/invalid text.
+        # Only commit if the text is a valid option.
+        coerced = self._coerce_class_text(new_class, fallback_to_last=False)
+        if coerced is None:
             return
-        self.current_annotations[current_row]["class"] = new_class
+        self._last_valid_class_text = coerced
+        # Normalize UI to canonical casing from options
+        self.class_input.blockSignals(True)
+        self.class_input.setEditText(coerced)
+        self.class_input.blockSignals(False)
+        self.current_annotations[current_row]["class"] = coerced
         self.is_modified = True
         self.image_display.set_annotations(self.current_annotations)
         self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
@@ -543,28 +571,70 @@ class AnnotationToolWindow(QMainWindow):
         if current_row < 0 or current_row >= len(self.current_annotations):
             return
 
-        value = self.class_detailed_input.currentText().strip()
-        if value:
-            self.current_annotations[current_row]["class_detailed"] = value
-        elif "class_detailed" in self.current_annotations[current_row]:
-            del self.current_annotations[current_row]["class_detailed"]
+        raw = self.class_detailed_input.currentText().strip()
+        if raw == "":
+            # Allow temporary clear while re-typing; only delete on save or editingFinished.
+            return
+
+        coerced = self._coerce_detailed_class_text(raw, fallback_to_last=False)
+        if coerced is None:
+            return
+        self._last_valid_class_detailed_text = coerced
+        # Normalize UI to canonical casing from options
+        self.class_detailed_input.blockSignals(True)
+        self.class_detailed_input.setEditText(coerced)
+        self.class_detailed_input.blockSignals(False)
+        self.current_annotations[current_row]["class_detailed"] = coerced
 
         self.is_modified = True
         self.image_display.set_annotations(self.current_annotations)
         self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
         self.image_display.set_selected_bbox(current_row)
         self.schedule_autosave()
+    def _coerce_detailed_class_text(self, text: str, *, fallback_to_last: bool = True) -> Optional[str]:
+        """
+        Return canonical class_detailed text from options.
 
-    def _find_class_index(self, cls: str) -> int:
-        """Return combobox index for class, fallback to 'Other'."""
-        if not cls:
-            return -1
-        for i in range(self.class_input.count()):
-            if self.class_input.itemText(i).strip().lower() == cls.strip().lower():
-                return i
-        # fallback
-        other_idx = self.class_input.findText("Other", Qt.MatchFixedString)
-        return other_idx if other_idx >= 0 else 0
+        - If `text` matches an option (case-insensitive), return canonical text.
+        - If invalid and fallback_to_last=True, return last valid (or "" if none).
+        - If invalid and fallback_to_last=False, return None (do not commit while typing).
+        """
+        t = (text or "").strip()
+        if t:
+            canonical = self._detailed_class_options_lookup.get(t.casefold())
+            if canonical is not None:
+                return canonical
+        if not fallback_to_last:
+            return None
+        return (self._last_valid_class_detailed_text or "").strip()
+
+
+    def _class_other_text(self) -> str:
+        """Return the canonical 'Other' option if present, else first option, else empty."""
+        for opt in CLASS_OPTIONS:
+            if isinstance(opt, str) and opt.strip().casefold() == "other":
+                return opt.strip()
+        for opt in CLASS_OPTIONS:
+            if isinstance(opt, str) and opt.strip():
+                return opt.strip()
+        return ""
+
+    def _coerce_class_text(self, text: str, *, fallback_to_last: bool = True) -> Optional[str]:
+        """
+        Return canonical class text from options.
+
+        - If `text` matches an option (case-insensitive), return that option's canonical text.
+        - If not valid and fallback_to_last=True, return last valid or 'Other'.
+        - If not valid and fallback_to_last=False, return None (do not commit while typing).
+        """
+        t = (text or "").strip()
+        if t:
+            canonical = self._class_options_lookup.get(t.casefold())
+            if canonical is not None:
+                return canonical
+        if not fallback_to_last:
+            return None
+        return (self._last_valid_class_text or "").strip() or self._class_other_text()
 
     def _on_class_text_edited(self, text: str):
         """When Class input becomes empty, show all options (like Class Detailed)."""
@@ -578,6 +648,39 @@ class AnnotationToolWindow(QMainWindow):
         except Exception:
             pass
 
+    def _on_class_editing_finished(self):
+        """Strong validation: on Enter / focus-out, revert invalid value to last valid / Other.
+
+        Note: we allow the user to temporarily clear the field while re-typing.
+        """
+        if self.updating_inputs:
+            return
+        raw = self.class_input.currentText().strip()
+        # Allow user to clear the field without immediately snapping back.
+        if raw == "":
+            return
+
+        # Non-empty but invalid -> revert to last valid / Other.
+        coerced = self._coerce_class_text(raw, fallback_to_last=True) or self._class_other_text()
+        if not coerced:
+            return
+
+        self._last_valid_class_text = coerced
+        self.class_input.blockSignals(True)
+        self.class_input.setEditText(coerced)
+        self.class_input.blockSignals(False)
+
+        # Commit to model (and autosave) if a bbox is selected
+        current_row = self.bbox_list.currentRow()
+        if 0 <= current_row < len(self.current_annotations):
+            if self.current_annotations[current_row].get("class", "") != coerced:
+                self.current_annotations[current_row]["class"] = coerced
+                self.is_modified = True
+                self.image_display.set_annotations(self.current_annotations)
+                self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
+                self.image_display.set_selected_bbox(current_row)
+                self.schedule_autosave()
+
     def _on_detailed_class_text_edited(self, text: str):
         if self.updating_inputs:
             return
@@ -588,6 +691,45 @@ class AnnotationToolWindow(QMainWindow):
                 self._detailed_class_completer.complete()
             except Exception:
                 pass
+
+    def _on_detailed_class_editing_finished(self):
+        """Strong validation: allow clear; non-empty invalid -> revert to last valid (or clear)."""
+        if self.updating_inputs:
+            return
+        raw = self.class_detailed_input.currentText().strip()
+        if raw == "":
+            # Allow clear while re-typing; don't snap back.
+            return
+        coerced = self._coerce_detailed_class_text(raw, fallback_to_last=True)
+        # If invalid and no last valid, clear it.
+        if coerced is None:
+            coerced = ""
+        self.class_detailed_input.blockSignals(True)
+        self.class_detailed_input.setEditText(coerced)
+        self.class_detailed_input.blockSignals(False)
+        if coerced:
+            self._last_valid_class_detailed_text = coerced
+
+        # Commit to model (and autosave) if a bbox is selected
+        current_row = self.bbox_list.currentRow()
+        if 0 <= current_row < len(self.current_annotations):
+            if coerced:
+                if self.current_annotations[current_row].get("class_detailed", "") != coerced:
+                    self.current_annotations[current_row]["class_detailed"] = coerced
+                    self.is_modified = True
+                    self.image_display.set_annotations(self.current_annotations)
+                    self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
+                    self.image_display.set_selected_bbox(current_row)
+                    self.schedule_autosave()
+            else:
+                # If cleared, remove the key (on editingFinished, not while typing).
+                if "class_detailed" in self.current_annotations[current_row]:
+                    del self.current_annotations[current_row]["class_detailed"]
+                    self.is_modified = True
+                    self.image_display.set_annotations(self.current_annotations)
+                    self._refresh_bbox_list_preserve_selection(prefer_row=current_row)
+                    self.image_display.set_selected_bbox(current_row)
+                    self.schedule_autosave()
 
     def add_bbox(self):
         img_path, _ = self.matched_pairs[self.current_frame_index]
@@ -633,8 +775,29 @@ class AnnotationToolWindow(QMainWindow):
     def save_annotations(self):
         current_row = self.bbox_list.currentRow()
         if 0 <= current_row < len(self.current_annotations):
-            self.current_annotations[current_row]["class"] = self.class_input.currentText().strip()
-            cd = self.class_detailed_input.currentText().strip()
+            # Strong validation before persisting: Class must be from dropdown options.
+            raw = self.class_input.currentText().strip()
+            if raw == "":
+                coerced = self._class_other_text()
+            else:
+                coerced = self._coerce_class_text(raw, fallback_to_last=True) or self._class_other_text()
+            if coerced:
+                self._last_valid_class_text = coerced
+                self.class_input.blockSignals(True)
+                self.class_input.setEditText(coerced)
+                self.class_input.blockSignals(False)
+                self.current_annotations[current_row]["class"] = coerced
+            # Strong validation before persisting: class_detailed must be from dropdown options or empty.
+            cd_raw = self.class_detailed_input.currentText().strip()
+            if cd_raw == "":
+                cd = ""
+            else:
+                cd = self._coerce_detailed_class_text(cd_raw, fallback_to_last=True) or ""
+                if cd:
+                    self._last_valid_class_detailed_text = cd
+                    self.class_detailed_input.blockSignals(True)
+                    self.class_detailed_input.setEditText(cd)
+                    self.class_detailed_input.blockSignals(False)
             dc = self.detailed_caption_input.toPlainText().strip()
             if cd:
                 self.current_annotations[current_row]["class_detailed"] = cd

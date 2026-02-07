@@ -1,0 +1,18 @@
+{
+  "classes": [
+    "Person",
+    "Bicycle",
+    "Car",
+    "Motorcycle",
+    "Bus",
+    "Train",
+    "Truck",
+    "Traffic Light",
+    "Fire Hydrant",
+    "Stop Sign",
+    "Parking Meter",
+    "Bench",
+    "Dog",
+    "Other"
+  ]
+}

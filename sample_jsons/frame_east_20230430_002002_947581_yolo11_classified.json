@@ -2,14 +2,14 @@
   {
     "box": [
       241,
-      505,
+      506,
       413,
-      624
+      625
     ],
-    "class": "car",
+    "class": "Car",
     "score": 0.559285,
     "detailed_caption": "a car is seen in a  video released by the fbi.",
-    "class_detailed": "police car"
+    "class_detailed": "Car"
   },
   {
     "box": [
@@ -31,11 +31,11 @@
     ],
     "class": "Car",
     "score": 0.448392,
-    "detailed_caption": "aa car is seen in t",
+    "detailed_caption": "a car is seen in t",
     "class_detailed": "Car"
   },
   {
-    "class": "pedestrian",
+    "class": "Person",
     "box": [
       682,
       549,
