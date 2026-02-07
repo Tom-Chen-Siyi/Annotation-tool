@@ -6,10 +6,10 @@
       1431.1927,
       375.2585
     ],
-    "class": "traffic light",
+    "class": "Traffic Light",
     "score": 0.512392,
     "detailed_caption": "a close up of a light switch on a wall",
-    "class_detailed": "traffic light"
+    "class_detailed": "Traffic Light"
   },
   {
     "box": [
@@ -21,7 +21,7 @@
     "class": "car",
     "score": 0.478348,
     "detailed_caption": "da car is seen in this  image from a video released by the fbi.",
-    "class_detailed": "police car"
+    "class_detailed": "Car"
   },
   {
     "class": "car",

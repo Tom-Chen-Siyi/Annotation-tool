@@ -29,10 +29,10 @@
       796,
       536
     ],
-    "class": "car",
+    "class": "Car",
     "score": 0.448392,
     "detailed_caption": "aa car is seen in t",
-    "class_detailed": "car"
+    "class_detailed": "Car"
   },
   {
     "class": "pedestrian",
@@ -43,7 +43,7 @@
       625
     ],
     "score": 1.0,
-    "class_detailed": "pedestrian",
+    "class_detailed": "Pedestrian",
     "detailed_caption": "A pedestrian is crossing the road."
   },
   {
