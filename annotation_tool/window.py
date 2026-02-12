@@ -294,6 +294,7 @@ class AnnotationToolWindow(QMainWindow):
         self.connect_signals()
 
         # Global shortcuts
+        # BBox navigation
         self._shortcut_prev_bbox = QShortcut(Qt.Key_A, self)
         self._shortcut_prev_bbox.setContext(Qt.ApplicationShortcut)
         self._shortcut_prev_bbox.activated.connect(self.select_prev_bbox)
@@ -302,6 +303,16 @@ class AnnotationToolWindow(QMainWindow):
         self._shortcut_next_bbox.setContext(Qt.ApplicationShortcut)
         self._shortcut_next_bbox.activated.connect(self.select_next_bbox)
 
+        # Frame navigation
+        self._shortcut_prev_frame = QShortcut(Qt.Key_Left, self)
+        self._shortcut_prev_frame.setContext(Qt.ApplicationShortcut)
+        self._shortcut_prev_frame.activated.connect(self.previous_frame)
+
+        self._shortcut_next_frame = QShortcut(Qt.Key_Right, self)
+        self._shortcut_next_frame.setContext(Qt.ApplicationShortcut)
+        self._shortcut_next_frame.activated.connect(self.next_frame)
+
+        # Delete bbox
         self._shortcut_delete_bbox = QShortcut(Qt.Key_Delete, self)
         self._shortcut_delete_bbox.setContext(Qt.ApplicationShortcut)
         self._shortcut_delete_bbox.activated.connect(self.delete_bbox_shortcut)
@@ -990,6 +1001,8 @@ class AnnotationToolWindow(QMainWindow):
         try:
             self._shortcut_prev_bbox.setEnabled(enabled)
             self._shortcut_next_bbox.setEnabled(enabled)
+            self._shortcut_prev_frame.setEnabled(enabled)
+            self._shortcut_next_frame.setEnabled(enabled)
         except Exception:
             pass
         # Delete shortcuts
